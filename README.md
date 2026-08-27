@@ -65,3 +65,51 @@ Gra oferuje:
    ```bash
    git clone https://github.com/twoja-nazwa/OpenCardGame.git
    cd OpenCardGame
+
+2. **Zainstaluj zależności**
+    ```bash
+    pip install pygame pillow lupa pyyaml
+
+2. **Uruchom grę**
+    ```bash
+    python main.py
+
+.
+├── main.py                 # Punkt wejścia
+├── menu.py                 # Menu główne
+├── game.py                 # Główna pętla gry (łączy logikę i widok)
+├── game_logic.py           # Logika gry (zagrywanie, dołączanie, tury, zasoby)
+├── game_view.py            # Rysowanie całej planszy (strefy, ręka, przeciwnicy)
+├── player.py               # Klasa gracza (ręka, talia, strefy, zasoby)
+├── card.py                 # Klasa karty i enuny (CardType, Faction, Zone)
+├── card_view.py            # Wyświetlanie pojedynczej karty (tooltip, podgląd)
+├── card_renderer.py        # Renderowanie kart (ładowanie obrazków, ramek)
+├── card_generator.py       # Generowanie plików PNG kart
+├── deck_editor.py          # Edytor talii
+├── fonts.py                # Zarządzanie czcionkami (singleton)
+├── localization.py         # Obsługa tłumaczeń (YAML)
+├── constants.py            # Stałe (rozmiary, kolory, ścieżki)
+│
+├── defines/                # Pliki konfiguracyjne w Lua
+│   ├── cards.lua           # Definicje wszystkich kart
+│   ├── frames.lua          # Definicje ramek
+│   └── game.lua            # Konfiguracja gry (inicjatywa, max_hand_size, itp.)
+│
+├── decks/                  # Talie graczy (JSON)
+│   └── default.json
+│
+├── images/                 # Zasoby graficzne
+│   ├── cards/              # Obrazki kart i ikony
+│   ├── board/              # Tła planszy
+│   └── start_screen/       # Tła menu
+│
+├── fonts/                  # Pliki czcionek (TTF)
+├── translations/           # Tłumaczenia (YAML)
+│   ├── pl/                 # Polskie
+│   │   ├── ui_texts.yaml
+│   │   └── card_names.yaml
+│   └── en/                 # Angielskie
+│       ├── ui_texts.yaml
+│       └── card_names.yaml
+│
+└── rendered_cards/         # Wygenerowane obrazki kart (PNG)
