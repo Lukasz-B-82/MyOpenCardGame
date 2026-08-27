@@ -12,7 +12,7 @@ Projekt jest w fazie rozwoju – zapraszamy do współtworzenia!
 - [Wymagania systemowe](#-wymagania-systemowe)
 - [Instalacja i uruchomienie](#-instalacja-i-uruchomienie)
 - [Struktura projektu](#-struktura-projektu)
-- [Konfiguracja i rozszerzanie](#-konfiguracja-i-rozszerzanie)
+- [Konfiguracja i rozszerzanie](#configuration)
 - [Tworzenie własnych kart](#-tworzenie-własnych-kart)
 - [Tłumaczenia](#-tłumaczenia)
 - [Licencja](#-licencja)
@@ -127,4 +127,5 @@ Gra oferuje:
     └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
 ```
 
+<a name="configuration"></a>
 ## ⚙️ Konfiguracja i rozszerzanie
