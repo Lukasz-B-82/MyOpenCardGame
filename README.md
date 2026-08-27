@@ -76,10 +76,10 @@ Gra oferuje:
 
 ## 📁 Struktura projektu
 
-    ```text
-    📁 OpenCardGame/
-    │
-    ├── main.py                 # Punkt wejścia
+```text
+📁 OpenCardGame/
+│
+├── main.py                 # Punkt wejścia
     ├── menu.py                 # Menu główne
     ├── game.py                 # Główna pętla gry (łączy logikę i widok)
     ├── game_logic.py           # Logika gry (zagrywanie, dołączanie, tury, zasoby)
@@ -125,7 +125,6 @@ Gra oferuje:
     │       └── card_names.yaml
     │
     └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
-```markdown
 ```
 
 ## ⚙️ Konfiguracja i rozszerzanie
