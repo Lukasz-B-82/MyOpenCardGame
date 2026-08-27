@@ -74,7 +74,10 @@ Gra oferuje:
     ```bash
     python main.py
 
-.
+## 📁 Struktura projektu
+
+📁 OpenCardGame/
+│
 ├── main.py                 # Punkt wejścia
 ├── menu.py                 # Menu główne
 ├── game.py                 # Główna pętla gry (łączy logikę i widok)
@@ -89,27 +92,35 @@ Gra oferuje:
 ├── fonts.py                # Zarządzanie czcionkami (singleton)
 ├── localization.py         # Obsługa tłumaczeń (YAML)
 ├── constants.py            # Stałe (rozmiary, kolory, ścieżki)
+├── README.md               # Ten plik
 │
-├── defines/                # Pliki konfiguracyjne w Lua
+├── 📁 defines/             # Pliki konfiguracyjne w Lua
 │   ├── cards.lua           # Definicje wszystkich kart
 │   ├── frames.lua          # Definicje ramek
 │   └── game.lua            # Konfiguracja gry (inicjatywa, max_hand_size, itp.)
 │
-├── decks/                  # Talie graczy (JSON)
+├── 📁 decks/               # Talie graczy (JSON)
 │   └── default.json
 │
-├── images/                 # Zasoby graficzne
-│   ├── cards/              # Obrazki kart i ikony
-│   ├── board/              # Tła planszy
-│   └── start_screen/       # Tła menu
+├── 📁 images/              # Zasoby graficzne
+│   ├── 📁 cards/           # Obrazki kart
+│   │   ├── backs/          # Rewersy kart
+│   │   ├── borders/        # Ramki
+│   │   └── icons/          # Ikony typów i flagi frakcji
+│   ├── 📁 board/           # Tła planszy
+│   └── 📁 start_screen/    # Tła menu
 │
-├── fonts/                  # Pliki czcionek (TTF)
-├── translations/           # Tłumaczenia (YAML)
-│   ├── pl/                 # Polskie
+├── 📁 fonts/               # Pliki czcionek (TTF)
+│   ├── StoryScript-Regular.ttf
+│   ├── BIZUDGothic-Regular.ttf
+│   └── BIZUDGothic-Bold.ttf
+│
+├── 📁 translations/        # Tłumaczenia (YAML)
+│   ├── 📁 pl/              # Polskie
 │   │   ├── ui_texts.yaml
 │   │   └── card_names.yaml
-│   └── en/                 # Angielskie
+│   └── 📁 en/              # Angielskie
 │       ├── ui_texts.yaml
 │       └── card_names.yaml
 │
-└── rendered_cards/         # Wygenerowane obrazki kart (PNG)
+└── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
