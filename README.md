@@ -76,6 +76,7 @@ Gra oferuje:
 
 ## 📁 Struktura projektu
 
+```text
 📁 OpenCardGame/
 │
 ├── main.py                 # Punkt wejścia
