@@ -76,7 +76,7 @@ Gra oferuje:
 
 ## 📁 Struktura projektu
 
-```text
+    ```text
     📁 OpenCardGame/
     │
     ├── main.py                 # Punkt wejścia
@@ -125,5 +125,7 @@ Gra oferuje:
     │       └── card_names.yaml
     │
     └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
+```markdown
+```
 
 ## ⚙️ Konfiguracja i rozszerzanie
