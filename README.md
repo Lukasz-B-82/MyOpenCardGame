@@ -126,5 +126,6 @@ Gra oferuje:
     │
     └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
 ```markdown
+```
 
 ## ⚙️ Konfiguracja i rozszerzanie
