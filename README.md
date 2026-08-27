@@ -125,6 +125,6 @@ Gra oferuje:
     │       └── card_names.yaml
     │
     └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
-```
+```markdown
 
 ## ⚙️ Konfiguracja i rozszerzanie
