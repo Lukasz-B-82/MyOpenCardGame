@@ -129,3 +129,61 @@ Gra oferuje:
 
 <a name="configuration"></a>
 ## ⚙️ Konfiguracja i rozszerzanie
+
+# Definicje kart
+
+```lua
+-- cards.lua
+-- Definicje kart – każda karta ma unikalny klucz card_<numer>
+-- name_key wskazuje na klucz w tłumaczeniach (np. "card_0_name")
+
+-- Typy kart
+local CardType = {
+    SOLDIER = "SOLDIER",
+    WORKER = "WORKER",
+    VEHICLE = "VEHICLE",
+    TANK = "TANK",
+    CAR = "CAR",
+    PLANE = "PLANE",
+    WEAPON = "WEAPON",
+    TERRAIN = "TERRAIN",
+    CITY = "CITY",
+    BUILDING = "BUILDING",
+    ARTILLERY = "ARTILLERY"
+}
+
+-- Frakcje, do których należą karty (mogą być używane do ograniczeń w grze)
+local Faction = {
+    NEUTRAL = "NEUTRAL",
+    RED = "RED",
+    BLUE = "BLUE",
+    GREEN = "GREEN",
+    WHITE = "WHITE",
+    BLACK = "BLACK"
+}
+
+-- Strefy, w których karty mogą być umieszczane
+local Zone = {
+    FRONT = "front",
+    SECOND = "second",
+    BACK = "back",
+    STATE = "state"
+}
+```
+
+Przykłądy kart:
+- żołnierz
+```lua
+cards["card_0"] = {
+    name_key = "card_0_name",
+    type = CardType.SOLDIER,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 5,
+    initiative = 2,
+    food_consumption = 1,
+    allowed_zones = { Zone.BACK },
+    allowed_attachments = { CardType.WEAPON, CardType.TANK, CardType.PLANE, CardType.ARTILLERY },
+    image = "0.png",
+    frame_key = "01"
+}
+```
