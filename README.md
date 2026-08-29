@@ -130,7 +130,9 @@ Gra oferuje:
 <a name="configuration"></a>
 ## ⚙️ Konfiguracja i rozszerzanie
 
-### Definicje kart
+### Definicje kart 
+Pliki .lua
+[defines/cards.lua](defines/cards.lua)
 
 ```lua
 -- cards.lua
@@ -201,4 +203,167 @@ cards["card_8"] = {
     image = "8.png",
     frame_key = "01"
 }
+```
+- Czołg
+```lua
+cards["card_11"] = {
+    name_key = "card_11_name",
+    type = CardType.TANK,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 6,
+    cost_production = 6,
+    fuel_consumption = 2,
+    cost_steal = 10,
+    allowed_zones = {},
+    allowed_attachments = {},
+    image = "11.png",
+    frame_key = "04"
+}
+```
+- Tereny (Równiny, Wzgórza, Góry)
+```lua
+cards["card_13"] = {
+    name_key = "card_13_name",
+    type = CardType.TERRAIN,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 1,
+    initiative = 1,
+    max_workers = 2,
+    food_production = 4,
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "13.png",
+    frame_key = "01"
+}
+cards["card_19"] = {
+    name_key = "card_19_name",
+    type = CardType.TERRAIN,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 1,
+    initiative = 1,
+    max_workers = 2,
+    food_production = 2,
+    iron_ore_production = 1,
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "19.png",
+    frame_key = "01"
+}
+cards["card_22"] = {
+    name_key = "card_22_name",
+    type = CardType.TERRAIN,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 5,
+    initiative = 1,
+    max_workers = 3,
+    iron_ore_production = 2,
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "22.png",
+    frame_key = "01"
+}
+```
+- Bronie (Karabiny)
+```lua
+cards["card_24"] = {
+    name_key = "card_24_name",
+    type = CardType.WEAPON,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 2,
+    cost_production = 2,
+    allowed_zones = {},
+    allowed_attachments = {},
+    image = "24.png",
+    frame_key = "01"
+}
+```
+- Budynki (Fabryki, Huty, Rafinerie)
+```lua
+cards["card_31"] = {
+    name_key = "card_31_name",
+    type = CardType.BUILDING,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 8,
+    production = 2,
+    max_workers = 4,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 3 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 3 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "31.png",
+    frame_key = "03"
+}
+cards["card_53"] = {
+    name_key = "card_53_name",
+    type = CardType.BUILDING,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 10,
+    max_workers = 4,
+    steal_production = 1,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 5 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 5 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "53.png",
+    frame_key = "01"
+}
+cards["card_57"] = {
+    name_key = "card_57_name",
+    type = CardType.BUILDING,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 15,
+    max_workers = 4,
+    fuel_production = 1,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 5 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 5 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "57.png",
+    frame_key = "01"
+}
+```
+- Miasta
+```lua
+cards["card_47"] = {
+    name_key = "card_47_name",
+    type = CardType.CITY,
+    faction = Faction.GREEN,
+    cost_initiative = 10,
+    initiative = 2,
+    food_consumption = 5,
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = {},
+    image = "47.png",
+    frame_key = "01"
+}
+```
+
+### Definicje Gry (parametry startowe)
+[defines/game.lua](defines/game.lua)
+```lua
+-- defines/game.lua
+local game_start = {
+    initiative = 45,
+    max_hand_size = 10,
+    initial_hand = 7,
+    max_initiative = 50,
+    food_production = 10,
+    production = 0,
+    steal = 0,
+    logistics = 0,
+    oil_production = 0,
+    iron_production = 0,
+    fuel_production = 0,
+}
+
+return game_start
 ```
