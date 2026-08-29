@@ -13,9 +13,6 @@ Projekt jest w fazie rozwoju – zapraszamy do współtworzenia!
 - [Instalacja i uruchomienie](#-instalacja-i-uruchomienie)
 - [Struktura projektu](#-struktura-projektu)
 - [Konfiguracja i rozszerzanie](#configuration)
-- [Tworzenie własnych kart](#-tworzenie-własnych-kart)
-- [Tłumaczenia](#-tłumaczenia)
-- [Licencja](#-licencja)
 
 ---
 
