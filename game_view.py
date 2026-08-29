@@ -6,6 +6,7 @@ from card_view import CardView
 from card_renderer import draw_card
 from fonts import fonts
 from card import Zone, CardType
+from render_utils import draw_alpha_rect  # <-- NOWY IMPORT
 
 class GameView:
     def __init__(self, screen, logic, localization, card_back_image, background_image):
@@ -52,16 +53,12 @@ class GameView:
         self.discard_rect = pygame.Rect(0, 0, 100, 140)
 
         # ---------- SYSTEM KOMUNIKATÓW ----------
-        self.messages = []  # lista (tekst, kolor, czas_pojawienia)
-        self.message_duration = 5.0  # sekundy
+        self.messages = []
+        self.message_duration = 5.0
         self.message_font_size = 28
         self.message_padding = 15
 
     def add_message(self, text: str, msg_type: str = "info"):
-        """
-        Dodaje komunikat do wyświetlenia.
-        msg_type: "info" (niebieski), "error" (czerwony), "success" (zielony)
-        """
         colors = {
             "info": (100, 150, 255),
             "error": (255, 80, 80),
@@ -71,41 +68,31 @@ class GameView:
         self.messages.append((text, color, time.time()))
 
     def draw_messages(self):
-        """Rysuje wszystkie aktywne komunikaty w górnej części ekranu."""
         now = time.time()
-        # Usuń stare komunikaty
         self.messages = [m for m in self.messages if now - m[2] < self.message_duration]
-
         if not self.messages:
             return
 
         font = pygame.font.Font(None, self.message_font_size)
         line_height = font.get_height() + self.message_padding
-
-        # Oblicz wysokość wszystkich komunikatów
-        total_height = len(self.messages) * line_height + self.message_padding * 2
-        start_y = 80  # pod paskiem informacyjnym
+        start_y = 80
 
         for i, (text, color, timestamp) in enumerate(self.messages):
-            # Tło dla każdego komunikatu
             text_surf = font.render(text, True, color)
             text_rect = text_surf.get_rect()
-            
-            # Szerokość tła = szerokość tekstu + padding
             bg_width = text_rect.width + self.message_padding * 4
             bg_height = text_rect.height + self.message_padding * 2
             bg_x = (self.screen_width - bg_width) // 2
             bg_y = start_y + i * line_height
 
-            # Półprzezroczyste tło
-            bg = pygame.Surface((bg_width, bg_height), pygame.SRCALPHA)
-            bg.fill((0, 0, 0, 200))
-            self.screen.blit(bg, (bg_x, bg_y))
-            
-            # Ramka w kolorze komunikatu
-            pygame.draw.rect(self.screen, color, (bg_x, bg_y, bg_width, bg_height), 2)
+            # POPRAWA: użycie draw_alpha_rect
+            draw_alpha_rect(
+                self.screen,
+                bg_x, bg_y, bg_width, bg_height,
+                (0, 0, 0), 200,
+                color, 2
+            )
 
-            # Tekst
             text_x = bg_x + self.message_padding * 2
             text_y = bg_y + self.message_padding
             self.screen.blit(text_surf, (text_x, text_y))
@@ -117,7 +104,6 @@ class GameView:
     def draw(self):
         self.card_views.clear()
         self.screen.blit(self.background_image, (0, 0))
-        
         self.draw_info()
         self.draw_opponents()
         self.draw_zones()
@@ -195,9 +181,6 @@ class GameView:
         x = margin
         y = zones_y
 
-        move_targets = self.logic.get_move_targets()
-        is_move_mode = self.logic.is_move_mode()
-
         for i, zone in enumerate(self.zone_order):
             if i > 0:
                 x += inner_margin
@@ -205,31 +188,39 @@ class GameView:
             rect = pygame.Rect(x, y, width, zone_height)
             self.zone_rects[zone] = rect
 
-            # Tło
             is_allowed = (
                 zone in allowed_zones and
                 self.logic.check_requirements(self.logic.selected_card, player)
             )
-
-            bg_color = (60, 200, 60, 80) if is_allowed else (60, 60, 80, 75)
-            border_color = (0, 255, 0, 200) if is_allowed else (200, 200, 200, 50)
-
             is_move_target = self.logic.is_move_mode() and zone in self.logic.get_move_targets()
-            if is_move_target:
-                bg_color = (255, 255, 0, 80)  # żółte przezroczyste tło
-                border_color = (255, 255, 0, 200)  # żółta ramka
-            elif is_allowed:
-                bg_color = (60, 200, 60, 80)
-                border_color = (0, 255, 0, 200)
-            else:
-                bg_color = (60, 60, 80, 75)
-                border_color = (200, 200, 200, 50)
 
-            
-            bg = pygame.Surface((width, zone_height), pygame.SRCALPHA)
-            bg.fill(bg_color)
-            self.screen.blit(bg, (x, y))
-            pygame.draw.rect(self.screen, border_color, rect, 2 if not is_allowed else 4)
+            # Określenie kolorów
+            if is_move_target:
+                bg_color = (255, 255, 0)
+                bg_alpha = 80
+                border_color = (255, 255, 0)
+                border_alpha = 200
+                border_width = 4
+            elif is_allowed:
+                bg_color = (60, 200, 60)
+                bg_alpha = 80
+                border_color = (0, 255, 0)
+                border_alpha = 200
+                border_width = 4
+            else:
+                bg_color = (60, 60, 80)
+                bg_alpha = 75
+                border_color = (200, 200, 200)
+                border_alpha = 50
+                border_width = 2
+
+            # POPRAWA: użycie draw_alpha_rect dla tła strefy
+            draw_alpha_rect(
+                self.screen,
+                x, y, width, zone_height,
+                bg_color, bg_alpha,
+                border_color, border_width
+            )
 
             # Nazwa z licznikiem
             cards_in_zone = player.zones.get(zone, [])
@@ -267,13 +258,11 @@ class GameView:
                     view.draw(self.screen, cx, card_y, card_width, card_height, language=self.logic.language)
                     self.card_views.append(view)
 
-                    # Rysuj załączniki
                     if card.attached_cards:
                         attach_offset_x = 15
                         attach_offset_y = 15
-                        attach_scale = 1
-                        attach_width = int(card_width * attach_scale)
-                        attach_height = int(card_height * attach_scale)
+                        attach_width = card_width
+                        attach_height = card_height
                         for attach_card in card.attached_cards:
                             ax = cx + attach_offset_x
                             ay = card_y + attach_offset_y
@@ -300,9 +289,12 @@ class GameView:
 
     def draw_info(self):
         info_height = int(self.screen_height * 0.1)
-        bg = pygame.Surface((self.screen_width, info_height), pygame.SRCALPHA)
-        bg.fill((0, 0, 0, 100))
-        self.screen.blit(bg, (0, 0))
+        # POPRAWA
+        draw_alpha_rect(
+            self.screen,
+            0, 0, self.screen_width, info_height,
+            (0, 0, 0), 100
+        )
         info = f"Tura {self.logic.turn} | Gracz: {self.logic.current_player.name}"
         surf, rect = fonts.render_text(info, size_key="StoryScript L", color=WHITE, center=(self.screen_width//2, info_height//2))
         self.screen.blit(surf, rect)
@@ -328,40 +320,44 @@ class GameView:
         discard_height = 140
         self.discard_rect = pygame.Rect(discard_x, discard_y, discard_width, discard_height)
 
-        # Czy można odrzucić kartę?
-        can_discard = (self.logic.selected_card is not None and 
-                    self.logic.selected_card in player.hand and
-                    player.initiative >= 1)
-        # Czy można wziąć kartę ze stosu?
+        can_discard = (self.logic.selected_card is not None and
+                       self.logic.selected_card in player.hand and
+                       player.initiative >= 1)
         can_draw_from_discard = (len(player.discard) > 0 and player.initiative >= 5 and len(player.hand) < player.max_hand_size)
 
-        # Tło i ramka
         if can_discard:
-            bg_color = (0, 200, 0, 80)
+            bg_color = (0, 200, 0)
+            bg_alpha = 80
             border_color = (0, 255, 0)
+            border_width = 4
         elif can_draw_from_discard:
-            bg_color = (0, 100, 200, 80)
+            bg_color = (0, 100, 200)
+            bg_alpha = 80
             border_color = (0, 200, 255)
+            border_width = 4
         else:
-            bg_color = (60, 60, 80, 75)
+            bg_color = (60, 60, 80)
+            bg_alpha = 75
             border_color = (200, 200, 200)
+            border_width = 2
 
-        bg = pygame.Surface((discard_width, discard_height), pygame.SRCALPHA)
-        bg.fill(bg_color)
-        self.screen.blit(bg, (discard_x, discard_y))
-        pygame.draw.rect(self.screen, border_color, self.discard_rect, 2 if not (can_discard or can_draw_from_discard) else 4)
+        # POPRAWA
+        draw_alpha_rect(
+            self.screen,
+            discard_x, discard_y, discard_width, discard_height,
+            bg_color, bg_alpha,
+            border_color, border_width
+        )
 
         # Rysuj rewersy kart
         for i in range(min(len(player.discard), 12)):
             offset = i * 2
             self.screen.blit(self.card_back_image, (discard_x + offset, discard_y - offset))
-        
-        # Licznik
+
         count_text = str(len(player.discard))
         surf, _ = fonts.render_text(count_text, size_key="StoryScript M", color=WHITE)
         self.screen.blit(surf, (discard_x + discard_width//2 - surf.get_width()//2, discard_y + discard_height + 5))
 
-        # Etykieta akcji
         if can_discard:
             label = "Odrzuć (1 ini)"
             label_surf, _ = fonts.render_text(label, size_key="StoryScript XS", color=(0,255,0))
@@ -373,7 +369,6 @@ class GameView:
 
     def draw_hand(self):
         player = self.logic.current_player
-        
         bottom_start = int(self.screen_height * 0.6)
         bottom_height = int(self.screen_height * 0.4)
         hand_height = bottom_height // 2.5
@@ -381,10 +376,13 @@ class GameView:
         hand_width = self.screen_width - 500
         hand_x = 150
 
-        panel = pygame.Surface((hand_width, hand_height), pygame.SRCALPHA)
-        panel.fill((150, 150, 150, 80))
-        pygame.draw.rect(panel, (100, 100, 150, 255), panel.get_rect(), 2)
-        self.screen.blit(panel, (hand_x, hand_y))
+        # POPRAWA: tło panelu ręki
+        draw_alpha_rect(
+            self.screen,
+            hand_x, hand_y, hand_width, hand_height,
+            (150, 150, 150), 80,
+            (100, 100, 150), 2
+        )
 
         hand = player.hand
         if hand:
@@ -406,7 +404,6 @@ class GameView:
 
     def draw_initiative_bar(self):
         player = self.logic.current_player
-        
         bottom_start = int(self.screen_height * 0.6)
         bottom_height = int(self.screen_height * 0.4)
         hand_height = bottom_height // 2.5
@@ -436,7 +433,6 @@ class GameView:
 
     def draw_resources(self):
         player = self.logic.current_player
-        
         bottom_start = int(self.screen_height * 0.6)
         bottom_height = int(self.screen_height * 0.4)
         hand_height = bottom_height // 2.5
@@ -453,8 +449,8 @@ class GameView:
         line_height = 24
 
         resource_keys = [
-            ("food_production", "Żywność", player.food_production),  # dynamiczne
-            ("production", "Produkcja", player.production),  # dynamiczne
+            ("food_production", "Żywność", player.food_production),
+            ("production", "Produkcja", player.production),
             ("logistics", "Logistyka", player.logistics),
             ("oil_production", "Ropa", player.oil_production),
             ("fuel_production", "Paliwo", player.fuel_production),
@@ -483,7 +479,6 @@ class GameView:
             )
 
     def draw_end_turn(self):
-        # ---- Przycisk "Koniec tury" ----
         button_x = self.screen_width - 220
         button_y = self.screen_height - 70
         self.end_turn_button_rect = pygame.Rect(button_x, button_y, 200, 50)
@@ -530,17 +525,14 @@ class GameView:
                         return None
             if deck_rect.collidepoint(pos):
                 return "draw"
-            
+
             player = self.logic.current_player
-            
+
             for view in self.card_views:
                 if view.rect and view.rect.collidepoint(pos):
-                    # Sprawdź czy karta jest w ręce
                     if view.card in player.hand:
-                        # Karta w ręce – istniejąca logika
                         if self.logic.selected_card is not None and view.card != self.logic.selected_card:
                             if self.logic.can_attach_to_card(self.logic.selected_card, view.card):
-                                # Sprawdź czy target jest w strefie (dołączanie)
                                 for zone_cards in player.zones.values():
                                     if view.card in zone_cards:
                                         return ("attach", view.card)
@@ -549,37 +541,29 @@ class GameView:
                         else:
                             return ("select", view.card)
                     else:
-                        # Karta w strefie
-                        # Jeśli jest zaznaczona karta w ręce, próbuj dołączyć
                         if self.logic.selected_card is not None:
                             if self.logic.can_attach_to_card(self.logic.selected_card, view.card):
                                 return ("attach", view.card)
                             else:
-                                # Jeśli nie można dołączyć, odznacz
                                 return ("deselect", None)
                         else:
-                            # Jeśli to żołnierz, uruchom tryb przenoszenia
                             if view.card.card_type == CardType.SOLDIER:
                                 if self.logic.select_soldier_for_move(view.card):
                                     return ("move_select", None)
                                 else:
                                     return ("deselect", None)
                             else:
-                                # Inne karty w strefie – nic nie robimy lub odznaczamy
                                 return ("deselect", None)
-            
-            # Kliknięcie w strefę (nie w kartę)
+
             for zone, rect in self.zone_rects.items():
                 if rect.collidepoint(pos):
-                    # Jeśli tryb przenoszenia, próbuj przenieść do tej strefy
                     if self.logic.is_move_mode() and zone in self.logic.get_move_targets():
                         return ("move", zone)
-                    # W przeciwnym razie, jeśli zaznaczona karta, zagraj
                     elif self.logic.selected_card is not None:
                         return ("play", zone)
                     else:
                         return None
-            
+
             return ("deselect", None)
         elif button == 3:
             for view in self.card_views:
@@ -593,23 +577,19 @@ class GameView:
         return None
 
     def draw_opponents(self):
-        """Rysuje strefy wszystkich przeciwników."""
         opponents = [p for i, p in enumerate(self.logic.players) if i != self.logic.current_player_index]
         if not opponents:
             return
-        
-        # Obszar dla przeciwników: górna część ekranu, pod paskiem info
-        top_margin = 80  # po pasku info
-        bottom_margin = (self.screen_height * 0.60) - 15  # do stref aktywnego gracza
+
+        top_margin = 80
+        bottom_margin = (self.screen_height * 0.60) - 15
         available_height = bottom_margin - top_margin
-        available_width = self.screen_width - 20  # marginesy
-        
-        # Podziel dostępną przestrzeń na tyle samo kolumn ilu przeciwników
+        available_width = self.screen_width - 20
         num_opponents = len(opponents)
         panel_width = min(1000, available_width // num_opponents - 10)
         spacing = (available_width - panel_width * num_opponents) // (num_opponents + 1)
         x_start = spacing + 10
-        
+
         for idx, opponent in enumerate(opponents):
             x = x_start + idx * (panel_width + spacing)
             y = top_margin
@@ -617,10 +597,14 @@ class GameView:
             self._draw_opponent_panel(opponent, rect)
 
     def _draw_opponent_panel(self, opponent, rect):
-        bg = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        bg.fill((50, 50, 50, 50))
-        self.screen.blit(bg, rect)
-        pygame.draw.rect(self.screen, (200, 200, 200), rect, 2)
+        # POPRAWA: tło panelu przeciwnika
+        draw_alpha_rect(
+            self.screen,
+            rect.x, rect.y, rect.width, rect.height,
+            (50, 50, 50), 50,
+            (200, 200, 200), 2
+        )
+
         name_surf, _ = fonts.render_text(
             opponent.name,
             size_key="StoryScript M",
@@ -628,7 +612,7 @@ class GameView:
             center=(rect.centerx, rect.y + 25)
         )
         self.screen.blit(name_surf, name_surf.get_rect(center=(rect.centerx, rect.y + 25)))
-        
+
         zone_order = [Zone.STATE, Zone.BACK, Zone.SECOND, Zone.FRONT]
         zone_names = {
             Zone.STATE: "Państwo",
@@ -639,15 +623,14 @@ class GameView:
         y_offset = 60
         line_height = (rect.height - y_offset) // len(zone_order)
         font = pygame.font.Font(None, 16)
-        
+
         for zone in zone_order:
             cards = opponent.zones.get(zone, [])
             count = len(cards)
             text = f"{zone_names[zone]}: {count}"
             surf = font.render(text, True, (200, 200, 200))
             self.screen.blit(surf, (rect.x + 10, rect.y + y_offset))
-            
-            # Rysuj karty w strefie (małe)
+
             if cards:
                 card_width = 30
                 card_height = 42
@@ -655,7 +638,7 @@ class GameView:
                 max_per_row = (rect.width - 20) // (card_width + spacing)
                 row = 0
                 col = 0
-                for card in cards[:12]:  # ogranicz do 12 kart, żeby nie przepełnić
+                for card in cards[:12]:
                     cx = rect.x + 10 + col * (card_width + spacing)
                     cy = rect.y + y_offset + 20 + row * (card_height + spacing)
                     if cy + card_height > rect.y + y_offset + line_height - 10:
@@ -664,7 +647,6 @@ class GameView:
                     view.update_rect(cx, cy, card_width, card_height)
                     view.draw(self.screen, cx, cy, card_width, card_height, language=self.logic.language)
                     self.card_views.append(view)
-                    # Dołączone karty (małe przesunięcie)
                     if card.attached_cards:
                         attach_offset_x = 6
                         attach_offset_y = 6
