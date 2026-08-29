@@ -174,7 +174,7 @@ local Zone = {
 ```
 
 Przykłądy kart:
-- żołnierz
+- Żołnierz
 ```lua
 cards["card_0"] = {
     name_key = "card_0_name",
@@ -220,7 +220,7 @@ cards["card_11"] = {
     frame_key = "04"
 }
 ```
-- Tereny (Równiny, Wzgórza, Góry)
+- Tereny (Równina, Wzgórze, Góra)
 ```lua
 cards["card_13"] = {
     name_key = "card_13_name",
@@ -263,7 +263,7 @@ cards["card_22"] = {
     frame_key = "01"
 }
 ```
-- Bronie (Karabiny)
+- Broń (Karabin)
 ```lua
 cards["card_24"] = {
     name_key = "card_24_name",
@@ -277,7 +277,7 @@ cards["card_24"] = {
     frame_key = "01"
 }
 ```
-- Budynki (Fabryki, Huty, Rafinerie)
+- Budyneki (Fabryka, Huta, Rafineria)
 ```lua
 cards["card_31"] = {
     name_key = "card_31_name",
@@ -331,7 +331,7 @@ cards["card_57"] = {
     frame_key = "01"
 }
 ```
-- Miasta
+- Miasto
 ```lua
 cards["card_47"] = {
     name_key = "card_47_name",
