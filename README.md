@@ -203,8 +203,8 @@ cards["card_8"] = {
 ```
 - Czołg
 ```lua
-cards["card_11"] = {
-    name_key = "card_11_name",
+cards["card_63"] = {
+    name_key = "card_63_name",
     type = CardType.TANK,
     faction = Faction.NEUTRAL,
     cost_initiative = 6,
@@ -213,8 +213,16 @@ cards["card_11"] = {
     cost_steal = 10,
     allowed_zones = {},
     allowed_attachments = {},
-    image = "11.png",
-    frame_key = "04"
+    attack = {
+        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.HARD] = 3,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = { TargetsTypes.HARD },
+    defense = 5,
+    image = "63.png",
+    frame_key = "02"
 }
 ```
 - Tereny (Równina, Wzgórze, Góra)
@@ -262,15 +270,23 @@ cards["card_22"] = {
 ```
 - Broń (Karabin)
 ```lua
-cards["card_24"] = {
-    name_key = "card_24_name",
+cards["card_35"] = {
+    name_key = "card_35_name",
     type = CardType.WEAPON,
     faction = Faction.NEUTRAL,
     cost_initiative = 2,
     cost_production = 2,
     allowed_zones = {},
     allowed_attachments = {},
-    image = "24.png",
+    attack = {
+        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.HARD] = 0,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = { TargetsTypes.SOFT },
+    defense = 2,
+    image = "35.png",
     frame_key = "01"
 }
 ```
