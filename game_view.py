@@ -5,7 +5,7 @@ from constants import *
 from card_view import CardView
 from card_renderer import draw_card
 from fonts import fonts
-from card import Zone
+from card import Zone, CardType
 
 class GameView:
     def __init__(self, screen, logic, localization, card_back_image, background_image):
@@ -194,6 +194,9 @@ class GameView:
         x = margin
         y = zones_y
 
+        move_targets = self.logic.get_move_targets()
+        is_move_mode = self.logic.is_move_mode()
+
         for i, zone in enumerate(self.zone_order):
             if i > 0:
                 x += inner_margin
@@ -206,11 +209,25 @@ class GameView:
                 zone in allowed_zones and
                 self.logic.check_requirements(self.logic.selected_card, player)
             )
+
             bg_color = (60, 200, 60, 80) if is_allowed else (60, 60, 80, 75)
+            border_color = (0, 255, 0, 200) if is_allowed else (200, 200, 200, 50)
+
+            is_move_target = self.logic.is_move_mode() and zone in self.logic.get_move_targets()
+            if is_move_target:
+                bg_color = (255, 255, 0, 80)  # żółte przezroczyste tło
+                border_color = (255, 255, 0, 200)  # żółta ramka
+            elif is_allowed:
+                bg_color = (60, 200, 60, 80)
+                border_color = (0, 255, 0, 200)
+            else:
+                bg_color = (60, 60, 80, 75)
+                border_color = (200, 200, 200, 50)
+
+            
             bg = pygame.Surface((width, zone_height), pygame.SRCALPHA)
             bg.fill(bg_color)
             self.screen.blit(bg, (x, y))
-            border_color = (0, 255, 0, 200) if is_allowed else (200, 200, 200, 50)
             pygame.draw.rect(self.screen, border_color, rect, 2 if not is_allowed else 4)
 
             # Nazwa z licznikiem
@@ -467,22 +484,51 @@ class GameView:
             if deck_rect.collidepoint(pos):
                 return "draw"
             
+            player = self.logic.current_player
+            
             for view in self.card_views:
                 if view.rect and view.rect.collidepoint(pos):
-                    if self.logic.selected_card is not None and view.card != self.logic.selected_card:
-                        if self.logic.can_attach_to_card(self.logic.selected_card, view.card):
-                            player = self.logic.current_player
-                            for zone_cards in player.zones.values():
-                                if view.card in zone_cards:
-                                    return ("attach", view.card)
-                    if self.logic.selected_card == view.card:
-                        return ("deselect", None)
+                    # Sprawdź czy karta jest w ręce
+                    if view.card in player.hand:
+                        # Karta w ręce – istniejąca logika
+                        if self.logic.selected_card is not None and view.card != self.logic.selected_card:
+                            if self.logic.can_attach_to_card(self.logic.selected_card, view.card):
+                                # Sprawdź czy target jest w strefie (dołączanie)
+                                for zone_cards in player.zones.values():
+                                    if view.card in zone_cards:
+                                        return ("attach", view.card)
+                        if self.logic.selected_card == view.card:
+                            return ("deselect", None)
+                        else:
+                            return ("select", view.card)
                     else:
-                        return ("select", view.card)
+                        # Karta w strefie
+                        # Jeśli jest zaznaczona karta w ręce, próbuj dołączyć
+                        if self.logic.selected_card is not None:
+                            if self.logic.can_attach_to_card(self.logic.selected_card, view.card):
+                                return ("attach", view.card)
+                            else:
+                                # Jeśli nie można dołączyć, odznacz
+                                return ("deselect", None)
+                        else:
+                            # Jeśli to żołnierz, uruchom tryb przenoszenia
+                            if view.card.card_type == CardType.SOLDIER:
+                                if self.logic.select_soldier_for_move(view.card):
+                                    return ("move_select", None)
+                                else:
+                                    return ("deselect", None)
+                            else:
+                                # Inne karty w strefie – nic nie robimy lub odznaczamy
+                                return ("deselect", None)
             
+            # Kliknięcie w strefę (nie w kartę)
             for zone, rect in self.zone_rects.items():
                 if rect.collidepoint(pos):
-                    if self.logic.selected_card is not None:
+                    # Jeśli tryb przenoszenia, próbuj przenieść do tej strefy
+                    if self.logic.is_move_mode() and zone in self.logic.get_move_targets():
+                        return ("move", zone)
+                    # W przeciwnym razie, jeśli zaznaczona karta, zagraj
+                    elif self.logic.selected_card is not None:
                         return ("play", zone)
                     else:
                         return None

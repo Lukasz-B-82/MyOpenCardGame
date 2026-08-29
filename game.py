@@ -242,7 +242,21 @@ class Game:
                         else:
                             print("Nie można dobrać karty")
                     elif isinstance(action, tuple):
-                        if action[0] == "play":
+                        if action[0] == "move_success":
+                            self.view.add_message("Przeniesiono żołnierza!", "success")
+                        elif action[0] == "move_fail":
+                            self.view.add_message("Nie można przenieść żołnierza!", "error")
+                        elif action[0] == "move_select":
+                            self.view.add_message("Wybierz strefę docelową", "info")
+                        elif action[0] == "move":
+                            zone = action[1]
+                            if self.logic.move_soldier_to_zone(zone):
+                                self.view.add_message("Przeniesiono żołnierza!", "success")
+                            else:
+                                self.view.add_message("Nie można przenieść żołnierza!", "error")
+                        elif action[0] == "move_select":
+                            self.view.add_message("Wybierz strefę docelową (podświetlone)", "info")                
+                        elif action[0] == "play":
                             zone = action[1]
                             if self.logic.play_card_to_zone(zone):
                                 print(f"Zagrano kartę do strefy {zone.value}")

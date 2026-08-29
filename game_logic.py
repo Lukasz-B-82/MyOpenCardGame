@@ -28,12 +28,106 @@ class GameLogic:
         self.selected_card: Optional[Card] = None
         self.allowed_zones: List[Zone] = []
         self.attachment_targets: List[Tuple[Card, Zone]] = []
+        self.move_mode: bool = False          # czy jesteśmy w trybie przenoszenia
+        self.move_targets: List[Zone] = []    # dozwolone strefy do przeniesienia
+        self.selected_soldier: Optional[Card] = None  # żołnierz do przeniesienia
 
         self.view = None  # referencja do widoku
         
     @property
     def current_player(self) -> Player:
         return self.players[self.current_player_index]
+
+    def select_soldier_for_move(self, card: Card):
+        """Rozpoczyna tryb przenoszenia żołnierza."""
+        if card.card_type != CardType.SOLDIER:
+            self.add_message("Tylko żołnierze mogą być przenoszeni!", "error")
+            return False
+        # Sprawdź, czy żołnierz jest w którejś strefie
+        player = self.current_player
+        found_zone = None
+        for zone, cards in player.zones.items():
+            if card in cards:
+                found_zone = zone
+                break
+        if found_zone is None:
+            self.add_message("Żołnierz nie znajduje się w żadnej strefie!", "error")
+            return False
+
+        # Oblicz dostępne strefy docelowe
+        targets = []
+        for zone in [Zone.BACK, Zone.SECOND, Zone.FRONT]:
+            if zone == found_zone:
+                continue
+            # Koszt logistyki: BACK→SECOND = 1, BACK→FRONT = 2, SECOND→FRONT = 1
+            cost_logistics = self._get_move_logistics_cost(found_zone, zone)
+            if player.logistics >= cost_logistics and player.initiative >= 1:
+                targets.append(zone)
+        if not targets:
+            self.add_message("Brak dostępnych stref docelowych (za mało logistyki lub inicjatywy)", "error")
+            return False
+
+        self.selected_soldier = card
+        self.move_mode = True
+        self.move_targets = targets
+        self.selected_card = None
+        self.allowed_zones = []
+        self.attachment_targets = []
+
+        return True
+
+    def move_soldier_to_zone(self, zone: Zone) -> bool:
+        """Przenosi zaznaczonego żołnierza do strefy docelowej."""
+        if not self.move_mode or self.selected_soldier is None:
+            self.add_message("Nie wybrano żołnierza do przeniesienia", "error")
+            return False
+        if zone not in self.move_targets:
+            self.add_message("Ta strefa nie jest dostępna", "error")
+            return False
+
+        player = self.current_player
+        from_zone = None
+        for z, cards in player.zones.items():
+            if self.selected_soldier in cards:
+                from_zone = z
+                break
+        if from_zone is None:
+            self.add_message("Żołnierz nie znajduje się w żadnej strefie", "error")
+            return False
+
+        # Koszt logistyki
+        cost_log = self._get_move_logistics_cost(from_zone, zone)
+        if player.logistics < cost_log:
+            self.add_message(f"Za mało logistyki! Potrzeba: {cost_log}", "error")
+            return False
+        if player.initiative < 1:
+            self.add_message("Za mało inicjatywy! Potrzeba: 1", "error")
+            return False
+
+        # Przenieś żołnierza wraz z dołączonymi kartami
+        player.zones[from_zone].remove(self.selected_soldier)
+        player.zones[zone].append(self.selected_soldier)
+        player.logistics -= cost_log
+        player.initiative -= 1
+
+        # Wyczyść tryb przenoszenia
+        self.selected_soldier = None
+        self.move_mode = False
+        self.move_targets = []
+        self.add_message(f"Przeniesiono żołnierza do {zone.value}", "success")
+        return True
+
+    def _get_move_logistics_cost(self, from_zone: Zone, to_zone: Zone) -> int:
+        """Zwraca koszt logistyki przeniesienia żołnierza między strefami."""
+        # BACK → SECOND = 1, BACK → FRONT = 2, SECOND → FRONT = 1
+        if from_zone == Zone.BACK and to_zone == Zone.SECOND:
+            return 1
+        if from_zone == Zone.BACK and to_zone == Zone.FRONT:
+            return 2
+        if from_zone == Zone.SECOND and to_zone == Zone.FRONT:
+            return 1
+        # Przenoszenie w drugą stronę (cofanie) – można dodać później
+        return 999  # na razie zabraniamy cofania
     
     def can_attach_to_card(self, attached_card: Card, target_card: Card) -> bool:
         """
@@ -150,6 +244,16 @@ class GameLogic:
         self.selected_card = None
         self.allowed_zones = []
         self.attachment_targets = []
+        # Wyczyść również tryb przenoszenia
+        self.selected_soldier = None
+        self.move_mode = False
+        self.move_targets = []
+
+    def get_move_targets(self) -> List[Zone]:
+        return self.move_targets if self.move_mode else []
+
+    def is_move_mode(self) -> bool:
+        return self.move_mode
     
     def play_card_to_zone(self, zone: Zone) -> bool:
         if self.selected_card is None:
