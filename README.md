@@ -130,7 +130,7 @@ Gra oferuje:
 <a name="configuration"></a>
 ## ⚙️ Konfiguracja i rozszerzanie
 
-# Definicje kart
+### Definicje kart
 
 ```lua
 -- cards.lua
@@ -184,6 +184,21 @@ cards["card_0"] = {
     allowed_zones = { Zone.BACK },
     allowed_attachments = { CardType.WEAPON, CardType.TANK, CardType.PLANE, CardType.ARTILLERY },
     image = "0.png",
+    frame_key = "01"
+}
+```
+- Robotnik
+```lua
+cards["card_8"] = {
+    name_key = "card_8_name",
+    type = CardType.WORKER,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 3,
+    initiative = 1,
+    food_consumption = 1,
+    allowed_zones = {},
+    allowed_attachments = {},
+    image = "8.png",
     frame_key = "01"
 }
 ```

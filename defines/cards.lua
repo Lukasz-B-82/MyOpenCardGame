@@ -2,6 +2,7 @@
 -- Definicje kart – każda karta ma unikalny klucz card_<numer>
 -- name_key wskazuje na klucz w tłumaczeniach (np. "card_0_name")
 
+-- Typy kart
 local CardType = {
     SOLDIER = "SOLDIER",
     WORKER = "WORKER",
@@ -16,6 +17,7 @@ local CardType = {
     ARTILLERY = "ARTILLERY"
 }
 
+-- Frakcje, do których należą karty (mogą być używane do ograniczeń w grze)
 local Faction = {
     NEUTRAL = "NEUTRAL",
     RED = "RED",
@@ -25,6 +27,7 @@ local Faction = {
     BLACK = "BLACK"
 }
 
+-- Strefy, w których karty mogą być umieszczane
 local Zone = {
     FRONT = "front",
     SECOND = "second",
