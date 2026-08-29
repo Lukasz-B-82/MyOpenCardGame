@@ -13,4 +13,10 @@ local game_start = {
     fuel_production = 0,
 }
 
+local discard_card = {
+    initiative_cost = 1,
+    move_from_discard_to_deck_all_initiative_cost = 15,
+    move_from_discard_to_deck_first_initiative_cost = 5,
+}
+
 return game_start

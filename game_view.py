@@ -49,6 +49,7 @@ class GameView:
         }
 
         self.end_turn_button_rect = pygame.Rect(0, 0, 200, 50)
+        self.discard_rect = pygame.Rect(0, 0, 100, 140)
 
         # ---------- SYSTEM KOMUNIKATÓW ----------
         self.messages = []  # lista (tekst, kolor, czas_pojawienia)
@@ -325,12 +326,50 @@ class GameView:
         discard_y = self.screen_height - 180
         discard_width = 100
         discard_height = 140
+        self.discard_rect = pygame.Rect(discard_x, discard_y, discard_width, discard_height)
+
+        # Czy można odrzucić kartę?
+        can_discard = (self.logic.selected_card is not None and 
+                    self.logic.selected_card in player.hand and
+                    player.initiative >= 1)
+        # Czy można wziąć kartę ze stosu?
+        can_draw_from_discard = (len(player.discard) > 0 and player.initiative >= 5 and len(player.hand) < player.max_hand_size)
+
+        # Tło i ramka
+        if can_discard:
+            bg_color = (0, 200, 0, 80)
+            border_color = (0, 255, 0)
+        elif can_draw_from_discard:
+            bg_color = (0, 100, 200, 80)
+            border_color = (0, 200, 255)
+        else:
+            bg_color = (60, 60, 80, 75)
+            border_color = (200, 200, 200)
+
+        bg = pygame.Surface((discard_width, discard_height), pygame.SRCALPHA)
+        bg.fill(bg_color)
+        self.screen.blit(bg, (discard_x, discard_y))
+        pygame.draw.rect(self.screen, border_color, self.discard_rect, 2 if not (can_discard or can_draw_from_discard) else 4)
+
+        # Rysuj rewersy kart
         for i in range(min(len(player.discard), 12)):
             offset = i * 2
             self.screen.blit(self.card_back_image, (discard_x + offset, discard_y - offset))
+        
+        # Licznik
         count_text = str(len(player.discard))
         surf, _ = fonts.render_text(count_text, size_key="StoryScript M", color=WHITE)
         self.screen.blit(surf, (discard_x + discard_width//2 - surf.get_width()//2, discard_y + discard_height + 5))
+
+        # Etykieta akcji
+        if can_discard:
+            label = "Odrzuć (1 ini)"
+            label_surf, _ = fonts.render_text(label, size_key="StoryScript XS", color=(0,255,0))
+            self.screen.blit(label_surf, (discard_x + 10, discard_y + discard_height + 20))
+        elif can_draw_from_discard:
+            label = "Weź (5 ini)"
+            label_surf, _ = fonts.render_text(label, size_key="StoryScript XS", color=(0,200,255))
+            self.screen.blit(label_surf, (discard_x + 10, discard_y + discard_height + 20))
 
     def draw_hand(self):
         player = self.logic.current_player
@@ -481,6 +520,14 @@ class GameView:
             if self.end_turn_button_rect.collidepoint(pos):
                 return "end_turn"
             deck_rect = pygame.Rect(50, self.screen_height - 220, 100, 140)
+            if hasattr(self, 'discard_rect') and self.discard_rect.collidepoint(pos):
+                if self.logic.selected_card is not None and self.logic.selected_card in self.logic.current_player.hand:
+                    return "discard"
+                else:
+                    if self.logic.current_player.discard:
+                        return "draw_from_discard"
+                    else:
+                        return None
             if deck_rect.collidepoint(pos):
                 return "draw"
             

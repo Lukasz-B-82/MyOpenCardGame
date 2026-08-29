@@ -533,6 +533,44 @@ class GameLogic:
 
         print(f"update_player_production(add={add}) {player.production}")
 
+    def discard_selected_card(self) -> bool:
+        """Odrzuca zaznaczoną kartę z ręki na stos odrzuconych, koszt 1 inicjatywy."""
+        if self.selected_card is None:
+            self.add_message("Nie wybrano karty do odrzucenia!", "error")
+            return False
+        player = self.current_player
+        if player.initiative < 1:
+            self.add_message("Za mało inicjatywy (potrzeba 1)!", "error")
+            return False
+        if self.selected_card not in player.hand:
+            self.add_message("Karta nie znajduje się w ręce!", "error")
+            return False
+        # Odrzuć
+        player.hand.remove(self.selected_card)
+        player.discard.append(self.selected_card)
+        player.initiative -= 1
+        self.deselect_card()
+        self.add_message("Odrzucono kartę!", "success")
+        return True
+
+    def draw_from_discard(self) -> bool:
+        """Bierze ostatnią kartę ze stosu odrzuconych do ręki, koszt 5 inicjatywy."""
+        player = self.current_player
+        if not player.discard:
+            self.add_message("Stos odrzuconych jest pusty!", "error")
+            return False
+        if player.initiative < 5:
+            self.add_message("Za mało inicjatywy (potrzeba 5)!", "error")
+            return False
+        if len(player.hand) >= player.max_hand_size:
+            self.add_message("Masz za dużo kart na ręce!", "error")
+            return False
+        card = player.discard.pop()
+        player.hand.append(card)
+        player.initiative -= 5
+        self.add_message("Wzięto kartę ze stosu odrzuconych!", "success")
+        return True
+
     def load_game_config(self) -> dict:
         try:
             import lupa

@@ -241,6 +241,12 @@ class Game:
                             print("Dobrano kartę")
                         else:
                             print("Nie można dobrać karty")
+                    elif action == "discard":
+                        if self.logic.discard_selected_card():
+                            print("Odrzucono kartę")
+                    elif action == "draw_from_discard":
+                        if self.logic.draw_from_discard():
+                            print("Wzięto kartę ze stosu")
                     elif isinstance(action, tuple):
                         if action[0] == "move_success":
                             self.view.add_message("Przeniesiono żołnierza!", "success")
@@ -254,8 +260,6 @@ class Game:
                                 self.view.add_message("Przeniesiono żołnierza!", "success")
                             else:
                                 self.view.add_message("Nie można przenieść żołnierza!", "error")
-                        elif action[0] == "move_select":
-                            self.view.add_message("Wybierz strefę docelową (podświetlone)", "info")                
                         elif action[0] == "play":
                             zone = action[1]
                             if self.logic.play_card_to_zone(zone):
