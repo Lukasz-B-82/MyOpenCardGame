@@ -86,6 +86,12 @@ class Card:
     # ---------- IDENTYFIKATOR ----------
     id: str = field(default_factory=lambda: uuid.uuid4().hex, init=False)
     # Unikalny 32-znakowy identyfikator (UUID bez myślników)
+
+    # ---------- WALKA ----------
+    attack: Dict[str, int] = field(default_factory=dict)  # np. {"soft": 2, "hard": 0, "air": 0}
+    attack_range: int = 0
+    target_type: List[str] = field(default_factory=list)  # np. ["soft"]
+    defense: int = 0
     
     # ---------- METODY ----------
     def can_attach_to(self, target_card: 'Card') -> bool:
@@ -191,7 +197,11 @@ class Card:
             requirements=self.requirements.copy(),
             image_path=self.image_path,
             frame_key=self.frame_key,
-            logistics=self.logistics
+            logistics=self.logistics,
+            attack=self.attack.copy() if self.attack else {},
+            attack_range=self.attack_range,
+            target_type=self.target_type.copy() if self.target_type else [],
+            defense=self.defense,            
         )
     
     def __repr__(self):
@@ -291,6 +301,19 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
                 print(f"  Błąd konwersji wymagania: {req}")
                 
     frame_key = safe_get(defn, "frame_key", None)  # pobieramy frame_key
+
+    attack_data = safe_get(defn, "attack", {})
+    # Konwersja słownika Lua na słownik Pythona (klucze to stringi)
+    attack = {}
+    if attack_data:
+        for k, v in attack_data.items():
+            attack[str(k)] = int(v) if v is not None else 0
+
+    target_type_data = safe_get(defn, "target_type", [])
+    target_type = []
+    if target_type_data:
+        for t in lua_table_to_list(target_type_data):
+            target_type.append(str(t))
     
     # ---------- TWORZENIE KARTY ----------
     return Card(
@@ -318,6 +341,10 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
         image_path=safe_get(defn, "image"),
         frame_key=frame_key,
         logistics=int(safe_get(defn, "logistics", 0)),
+        attack=attack,
+        attack_range=int(safe_get(defn, "attack_range", 0)),
+        target_type=target_type,
+        defense=int(safe_get(defn, "defense", 0)),
     )
 
 # Jeśli potrzebujesz singletonu dla wszystkich kart, możesz dodać:

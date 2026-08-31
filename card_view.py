@@ -40,6 +40,9 @@ class CardView:
         pygame.draw.rect(surface, (100, 200, 255), self.rect, 3)
 
     def draw_tooltip(self, surface, x=None, y=None, font_small=None, font_medium=None, padding=10, game_logic=None):
+
+        print(f"DEBUG: attack={self.card.attack}, attack_range={self.card.attack_range}, target_type={self.card.target_type}, defense={self.card.defense}")
+        
         """
         Rysuje tooltip z opisem karty.
         Pozycja domyślnie w prawym górnym rogu.
@@ -102,6 +105,17 @@ class CardView:
         if self.card.allowed_attachments:
             attach_names = [self.localization.get_card_type_name(a) for a in self.card.allowed_attachments]
             lines.append((f"Można dołączyć: {', '.join(attach_names)}", (255, 255, 255)))
+
+        # Atrybuty walki
+        if self.card.attack:
+            attack_str = ", ".join([f"{k}:{v}" for k, v in self.card.attack.items() if v > 0])
+            lines.append((f"Atak: {attack_str}", (255, 255, 255)))
+        if self.card.attack_range > 0:
+            lines.append((f"Zasięg: {self.card.attack_range}", (255, 255, 255)))
+        if self.card.target_type:
+            lines.append((f"Cel: {', '.join(self.card.target_type)}", (255, 255, 255)))
+        if self.card.defense > 0:
+            lines.append((f"Obrona: {self.card.defense}", (255, 255, 255)))
 
         # ---------- OBLICZANIE ROZMIARU TOOLTIPA ----------
         line_height = font_small.get_height() + 4
