@@ -221,8 +221,9 @@ class GameLogic:
                 if (target_card.steal_production > 0 and player.iron_production > 0):
                     player.steal += min(target_card.steal_production, player.iron_production)
                     player.iron_production -= min(target_card.steal_production, player.iron_production)
-                if (self.selected_card.fuel_consumption > 0):
-                    player.fuel_production -= self.selected_card.fuel_consumption 
+    
+            if (self.selected_card.fuel_consumption > 0):
+                player.fuel_production -= self.selected_card.fuel_consumption 
             
             if (self.selected_card.cost_production > 0):
                 player.production -= self.selected_card.cost_production

@@ -6,7 +6,7 @@ from card_view import CardView
 from card_renderer import draw_card
 from fonts import fonts
 from card import Zone, CardType
-from render_utils import draw_alpha_rect  # <-- NOWY IMPORT
+from render_utils import draw_alpha_rect
 
 class GameView:
     def __init__(self, screen, logic, localization, card_back_image, background_image):
