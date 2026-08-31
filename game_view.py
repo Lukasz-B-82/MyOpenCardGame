@@ -6,7 +6,7 @@ from card_view import CardView
 from card_renderer import draw_card
 from fonts import fonts
 from card import Zone, CardType
-from render_utils import draw_alpha_rect
+from render_utils import draw_alpha_rect, draw_button, draw_text_bg
 
 class GameView:
     def __init__(self, screen, logic, localization, card_back_image, background_image):
@@ -85,7 +85,6 @@ class GameView:
             bg_x = (self.screen_width - bg_width) // 2
             bg_y = start_y + i * line_height
 
-            # POPRAWA: użycie draw_alpha_rect
             draw_alpha_rect(
                 self.screen,
                 bg_x, bg_y, bg_width, bg_height,
@@ -194,27 +193,22 @@ class GameView:
             )
             is_move_target = self.logic.is_move_mode() and zone in self.logic.get_move_targets()
 
-            # Określenie kolorów
             if is_move_target:
                 bg_color = (255, 255, 0)
                 bg_alpha = 80
                 border_color = (255, 255, 0)
-                border_alpha = 200
                 border_width = 4
             elif is_allowed:
                 bg_color = (60, 200, 60)
                 bg_alpha = 80
                 border_color = (0, 255, 0)
-                border_alpha = 200
                 border_width = 4
             else:
                 bg_color = (60, 60, 80)
                 bg_alpha = 75
                 border_color = (200, 200, 200)
-                border_alpha = 50
                 border_width = 2
 
-            # POPRAWA: użycie draw_alpha_rect dla tła strefy
             draw_alpha_rect(
                 self.screen,
                 x, y, width, zone_height,
@@ -222,7 +216,6 @@ class GameView:
                 border_color, border_width
             )
 
-            # Nazwa z licznikiem
             cards_in_zone = player.zones.get(zone, [])
             count = len(cards_in_zone)
             display_name = f"{self.zone_names[zone]} ({count})"
@@ -234,7 +227,6 @@ class GameView:
             )
             self.screen.blit(name_surf, name_surf.get_rect(center=(rect.centerx, rect.y + 12)))
 
-            # Karty w strefie
             if cards_in_zone:
                 card_spacing = 5
                 max_card_width = 100
@@ -289,7 +281,6 @@ class GameView:
 
     def draw_info(self):
         info_height = int(self.screen_height * 0.1)
-        # POPRAWA
         draw_alpha_rect(
             self.screen,
             0, 0, self.screen_width, info_height,
@@ -308,9 +299,20 @@ class GameView:
         for i in range(min(len(player.deck), 12)):
             offset = i * 2
             self.screen.blit(self.card_back_image, (deck_x + offset, deck_y - offset))
+
+        # Licznik z tłem
         count_text = str(len(player.deck))
-        surf, _ = fonts.render_text(count_text, size_key="StoryScript XS", color=WHITE)
-        self.screen.blit(surf, (deck_x + deck_width//2 - surf.get_width()//2, deck_y + deck_height + 5))
+        font = fonts.get_font("StoryScript XS")
+        draw_text_bg(
+            self.screen,
+            count_text,
+            font,
+            WHITE,
+            deck_x + deck_width//2 - 20, deck_y + deck_height + 5,
+            padding=6,
+            bg_color=(0, 0, 0),
+            bg_alpha=180
+        )
 
     def draw_discard(self):
         player = self.logic.current_player
@@ -341,7 +343,6 @@ class GameView:
             border_color = (200, 200, 200)
             border_width = 2
 
-        # POPRAWA
         draw_alpha_rect(
             self.screen,
             discard_x, discard_y, discard_width, discard_height,
@@ -349,23 +350,50 @@ class GameView:
             border_color, border_width
         )
 
-        # Rysuj rewersy kart
         for i in range(min(len(player.discard), 12)):
             offset = i * 2
             self.screen.blit(self.card_back_image, (discard_x + offset, discard_y - offset))
 
+        # Licznik z tłem – użycie draw_text_bg
         count_text = str(len(player.discard))
-        surf, _ = fonts.render_text(count_text, size_key="StoryScript M", color=WHITE)
-        self.screen.blit(surf, (discard_x + discard_width//2 - surf.get_width()//2, discard_y + discard_height + 5))
+        font = fonts.get_font("StoryScript M")
+        draw_text_bg(
+            self.screen,
+            count_text,
+            font,
+            WHITE,
+            discard_x + discard_width//2 - 20, discard_y + discard_height + 5,
+            padding=6,
+            bg_color=(0, 0, 0),
+            bg_alpha=180
+        )
 
         if can_discard:
             label = "Odrzuć (1 ini)"
-            label_surf, _ = fonts.render_text(label, size_key="StoryScript XS", color=(0,255,0))
-            self.screen.blit(label_surf, (discard_x + 10, discard_y + discard_height + 20))
+            label_font = fonts.get_font("StoryScript XS")
+            draw_text_bg(
+                self.screen,
+                label,
+                label_font,
+                (0, 255, 0),
+                discard_x + 10, discard_y + discard_height + 20,
+                padding=4,
+                bg_color=(0, 0, 0),
+                bg_alpha=150
+            )
         elif can_draw_from_discard:
             label = "Weź (5 ini)"
-            label_surf, _ = fonts.render_text(label, size_key="StoryScript XS", color=(0,200,255))
-            self.screen.blit(label_surf, (discard_x + 10, discard_y + discard_height + 20))
+            label_font = fonts.get_font("StoryScript XS")
+            draw_text_bg(
+                self.screen,
+                label,
+                label_font,
+                (0, 200, 255),
+                discard_x + 10, discard_y + discard_height + 20,
+                padding=4,
+                bg_color=(0, 0, 0),
+                bg_alpha=150
+            )
 
     def draw_hand(self):
         player = self.logic.current_player
@@ -376,7 +404,6 @@ class GameView:
         hand_width = self.screen_width - 500
         hand_x = 150
 
-        # POPRAWA: tło panelu ręki
         draw_alpha_rect(
             self.screen,
             hand_x, hand_y, hand_width, hand_height,
@@ -481,12 +508,20 @@ class GameView:
     def draw_end_turn(self):
         button_x = self.screen_width - 220
         button_y = self.screen_height - 70
-        self.end_turn_button_rect = pygame.Rect(button_x, button_y, 200, 50)
-        pygame.draw.rect(self.screen, (80, 80, 120), self.end_turn_button_rect)
-        pygame.draw.rect(self.screen, (200, 200, 200), self.end_turn_button_rect, 2)
+        width = 200
+        height = 50
+        self.end_turn_button_rect = pygame.Rect(button_x, button_y, width, height)
         text = self.localization.get("end_turn", "Koniec tury")
-        surf, _ = fonts.render_text(text, size_key="StoryScript M", color=WHITE, center=self.end_turn_button_rect.center)
-        self.screen.blit(surf, surf.get_rect(center=self.end_turn_button_rect.center))
+        font = fonts.get_font("StoryScript M")
+        draw_button(
+            self.screen,
+            button_x, button_y, width, height,
+            text,
+            font,
+            (80, 80, 120),
+            WHITE,
+            hover=False
+        )
 
     def draw_preview(self):
         if self.preview_visible and self.preview_view:
@@ -597,7 +632,6 @@ class GameView:
             self._draw_opponent_panel(opponent, rect)
 
     def _draw_opponent_panel(self, opponent, rect):
-        # POPRAWA: tło panelu przeciwnika
         draw_alpha_rect(
             self.screen,
             rect.x, rect.y, rect.width, rect.height,
