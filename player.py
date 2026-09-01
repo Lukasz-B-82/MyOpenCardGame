@@ -108,3 +108,6 @@ class Player:
     def shuffle_deck(self):
         """Tasuje talię."""
         random.shuffle(self.deck)
+
+    def reverse_deck(self):
+        self.deck.reverse()

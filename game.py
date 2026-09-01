@@ -280,6 +280,12 @@ class Game:
                                 self.logic.select_card(card)
                         elif action[0] == "deselect":
                             self.logic.deselect_card()
+                        elif action[0] == "attack_select":
+                            self.view.add_message("Wybierz przeciwnika do ataku (podświetlony)", "info")
+                        elif action[0] == "attack_success":
+                            self.view.add_message("Atak udany!", "success")
+                        elif action[0] == "attack_fail":
+                            self.view.add_message("Atak nieudany!", "error")                     
 
                 elif event.button == 3:
                     self.view.handle_click(event.pos, 3)

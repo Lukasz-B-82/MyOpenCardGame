@@ -18,6 +18,7 @@ class GameView:
         self.screen_width, self.screen_height = screen.get_size()
         self.zone_rects = {}
         self.card_views = []
+        self.opponent_rects = []
         self.hovered_card_view = None
         self.preview_view = None
         self.preview_visible = False
@@ -102,6 +103,7 @@ class GameView:
 
     def draw(self):
         self.card_views.clear()
+        self.opponent_rects.clear()
         self.screen.blit(self.background_image, (0, 0))
         self.draw_info()
         self.draw_opponents()
@@ -267,6 +269,48 @@ class GameView:
 
                     if self.logic.selected_card is not None and self.logic.can_attach_to_card(self.logic.selected_card, card):
                         pygame.draw.rect(self.screen, (0, 255, 0), view.rect, 2)
+                            
+                    if zone == Zone.FRONT:
+                        summary = self.logic.get_attack_summary()
+                        # Dla każdego zasięgu, jeśli ma atak, rysuj przycisk
+                        btn_x = rect.right - 70
+                        btn_y = rect.y + 8
+                        btn_width = 60
+                        btn_height = 25
+                        btn_spacing = 4
+                        
+                        # Zbierz przyciski dla zasięgów 1,2,3
+                        self.attack_buttons = {}
+                        for r in [1, 2, 3]:
+                            s = summary[r]
+                            if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
+                                # Przycisk dla zasięgu r
+                                btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+                                self.attack_buttons[r] = btn_rect
+                                
+                                # Tekst przycisku
+                                parts = []
+                                if s["soft"] > 0:
+                                    parts.append(f"S{s['soft']}")
+                                if s["hard"] > 0:
+                                    parts.append(f"H{s['hard']}")
+                                if s["air"] > 0:
+                                    parts.append(f"A{s['air']}")
+                                label = f"Z{r}: " + ",".join(parts) if parts else f"Z{r}"
+                                
+                                draw_button(
+                                    self.screen,
+                                    btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,
+                                    label,
+                                    fonts.get_font("StoryScript XXS"),
+                                    (200, 50, 50),
+                                    WHITE,
+                                    hover=False
+                                )
+                                btn_y += btn_height + btn_spacing
+                            else:
+                                # Jeśli nie ma ataku dla tego zasięgu, nie rysuj przycisku
+                                pass          
 
             else:
                 empty_surf, _ = fonts.render_text(
@@ -560,6 +604,22 @@ class GameView:
                         return None
             if deck_rect.collidepoint(pos):
                 return "draw"
+            if hasattr(self, 'attack_buttons') and self.attack_buttons:
+                for attack_range, btn_rect in self.attack_buttons.items():
+                    if btn_rect.collidepoint(pos):
+                        # Znajdź pierwszego przeciwnika z obrońcami
+                        for player in self.logic.players:
+                            if player == self.logic.current_player:
+                                continue
+                            defenders = self.logic.get_defenders(player)
+                            if defenders:
+                                if self.logic.perform_attack_on_player(player, attack_range):
+                                    return ("attack_success", None)
+                                else:
+                                    return ("attack_fail", None)
+                        # Jeśli nie ma celów
+                        self.logic.add_message("Brak celów do ataku!", "error")
+                        return ("attack_fail", None)
 
             player = self.logic.current_player
 
@@ -582,13 +642,22 @@ class GameView:
                             else:
                                 return ("deselect", None)
                         else:
+                            # Jeśli to żołnierz na froncie z bronią – atak
+                            if view.card.card_type == CardType.SOLDIER:
+                                if self.logic.get_zone_of_card(view.card) == Zone.FRONT:
+                                    print(f"DEBUG: Żołnierz {view.card.name_key} ma załączniki: {[a.name_key for a in view.card.attached_cards]}")
+                                    can_attack = any(a.attack_range > 0 for a in view.card.attached_cards)
+                                    print(f"Clicked soldier on front. Can attack: {can_attack}")
+                                    if can_attack:
+                                        if self.logic.select_attacker(view.card):
+                                            return ("attack_select", None)
+                                        else:
+                                            return ("attack_fail", None)
+                            # Jeśli nie żołnierz lub nie ma broni – przenoszenie (jeśli żołnierz)
                             if view.card.card_type == CardType.SOLDIER:
                                 if self.logic.select_soldier_for_move(view.card):
                                     return ("move_select", None)
-                                else:
-                                    return ("deselect", None)
-                            else:
-                                return ("deselect", None)
+                            return ("deselect", None)
 
             for zone, rect in self.zone_rects.items():
                 if rect.collidepoint(pos):
@@ -598,6 +667,14 @@ class GameView:
                         return ("play", zone)
                     else:
                         return None
+                    
+            if self.logic.is_attack_mode():
+                for opponent, rect in self.opponent_rects:
+                    if rect.collidepoint(pos):
+                        if self.logic.perform_attack_on_player(opponent):
+                            return ("attack_success", None)
+                        else:
+                            return ("attack_fail", None)
 
             return ("deselect", None)
         elif button == 3:
@@ -625,19 +702,30 @@ class GameView:
         spacing = (available_width - panel_width * num_opponents) // (num_opponents + 1)
         x_start = spacing + 10
 
+        self.opponent_rects.clear()
+
         for idx, opponent in enumerate(opponents):
             x = x_start + idx * (panel_width + spacing)
             y = top_margin
             rect = pygame.Rect(x, y, panel_width, available_height)
             self._draw_opponent_panel(opponent, rect)
+            self.opponent_rects.append((opponent, rect))
 
     def _draw_opponent_panel(self, opponent, rect):
+
+        #print(f"Attack mode: {self.logic.is_attack_mode()}, targets: {self.logic.get_attack_targets()}")
+
         draw_alpha_rect(
             self.screen,
             rect.x, rect.y, rect.width, rect.height,
             (50, 50, 50), 50,
             (200, 200, 200), 2
-        )
+        )        
+
+        is_attack_target = self.logic.is_attack_mode() and any(p == opponent for p, _ in self.logic.get_attack_targets())
+
+        if is_attack_target:
+            pygame.draw.rect(self.screen, (150, 150, 150), rect, 2)  # czerwona ramka
 
         name_surf, _ = fonts.render_text(
             opponent.name,
@@ -666,8 +754,8 @@ class GameView:
             self.screen.blit(surf, (rect.x + 10, rect.y + y_offset))
 
             if cards:
-                card_width = 30
-                card_height = 42
+                card_width = 40
+                card_height = 58
                 spacing = 4
                 max_per_row = (rect.width - 20) // (card_width + spacing)
                 row = 0
@@ -684,8 +772,8 @@ class GameView:
                     if card.attached_cards:
                         attach_offset_x = 6
                         attach_offset_y = 6
-                        attach_width = card_width - 4
-                        attach_height = card_height - 4
+                        attach_width = card_width
+                        attach_height = card_height
                         for i, attach in enumerate(card.attached_cards[:3]):
                             ax = cx + attach_offset_x * (i + 1)
                             ay = cy + attach_offset_y * (i + 1)

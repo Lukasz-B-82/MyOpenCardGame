@@ -17,7 +17,8 @@ class GameLogic:
         for cfg in players_config:
             player = Player(cfg["name"], config=self.game_config)
             player.deck = create_deck_func(cfg["deck"])
-            player.shuffle_deck()
+            #player.shuffle_deck()
+            player.reverse_deck()  # odwróć kolejność kart, aby pierwsza karta była na wierzchu
             player.draw_initial_hand(self.game_config.get("initial_hand", 5))
             self.players.append(player)
         
@@ -31,6 +32,10 @@ class GameLogic:
         self.move_mode: bool = False          # czy jesteśmy w trybie przenoszenia
         self.move_targets: List[Zone] = []    # dozwolone strefy do przeniesienia
         self.selected_soldier: Optional[Card] = None  # żołnierz do przeniesienia
+
+        self.attack_mode: bool = False
+        self.attack_targets: List[Tuple[Player, Card]] = []  # lista (gracz, karta_do_zaatakowania)
+        self.selected_attacker: Optional[Card] = None        
 
         self.view = None  # referencja do widoku
         
@@ -119,15 +124,18 @@ class GameLogic:
 
     def _get_move_logistics_cost(self, from_zone: Zone, to_zone: Zone) -> int:
         """Zwraca koszt logistyki przeniesienia żołnierza między strefami."""
-        # BACK → SECOND = 1, BACK → FRONT = 2, SECOND → FRONT = 1
         if from_zone == Zone.BACK and to_zone == Zone.SECOND:
             return 1
         if from_zone == Zone.BACK and to_zone == Zone.FRONT:
             return 2
         if from_zone == Zone.SECOND and to_zone == Zone.FRONT:
             return 1
-        # Przenoszenie w drugą stronę (cofanie) – można dodać później
-        return 999  # na razie zabraniamy cofania
+        if from_zone == Zone.FRONT and to_zone == Zone.SECOND:
+            return -1
+        if from_zone == Zone.FRONT and to_zone == Zone.BACK:
+            return -2
+        if from_zone == Zone.SECOND and to_zone == Zone.BACK:
+            return -1
     
     def can_attach_to_card(self, attached_card: Card, target_card: Card) -> bool:
         """
@@ -215,7 +223,7 @@ class GameLogic:
                     player.fuel_production += min(target_card.fuel_production, player.oil_production)
                     player.oil_production -= min(target_card.fuel_production, player.oil_production)
                 if (target_card.oil_production > 0):
-                    player.oil_production += target_card.oil_production
+                    player.oil_production, player.fuel_production = self.get_oil_to_fuel_balance(player)
                 if (target_card.iron_ore_production > 0):
                     player.iron_production += target_card.iron_ore_production
                 if (target_card.steal_production > 0 and player.iron_production > 0):
@@ -245,10 +253,12 @@ class GameLogic:
         self.selected_card = None
         self.allowed_zones = []
         self.attachment_targets = []
-        # Wyczyść również tryb przenoszenia
         self.selected_soldier = None
         self.move_mode = False
         self.move_targets = []
+        self.attack_mode = False
+        self.attack_targets = []
+        self.selected_attacker = None        
 
     def get_move_targets(self) -> List[Zone]:
         return self.move_targets if self.move_mode else []
@@ -415,19 +425,7 @@ class GameLogic:
         steel = 0
         logistics = 0
 
-        for card in player.zones.get(Zone.STATE, []):
-            if card.oil_production > 0:
-                workers_attached = sum(1 for c in card.attached_cards if c.card_type == CardType.WORKER)
-                oil += card.oil_production * workers_attached
-
-        for card in player.zones.get(Zone.STATE, []):
-            if card.fuel_production > 0:
-                workers_attached = sum(1 for c in card.attached_cards if c.card_type == CardType.WORKER)
-                fuel += card.fuel_production * workers_attached
-
-        fuel_production = min(oil, fuel)
-        oil -= fuel_production
-        fuel = fuel_production
+        oil, fuel = self.get_oil_to_fuel_balance(player)
 
         for card in player.zones.get(Zone.STATE, []):
             if card.iron_ore_production > 0:
@@ -452,6 +450,25 @@ class GameLogic:
                 fuel -= card.fuel_consumption
 
         return oil, fuel, iron, steel, logistics
+
+    def get_oil_to_fuel_balance(self, player: Player) -> int:
+        oil = 0
+        fuel = 0
+        for card in player.zones.get(Zone.STATE, []):
+            if card.oil_production > 0:
+                workers_attached = sum(1 for c in card.attached_cards if c.card_type == CardType.WORKER)
+                oil += card.oil_production * workers_attached
+
+        for card in player.zones.get(Zone.STATE, []):
+            if card.fuel_production > 0:
+                workers_attached = sum(1 for c in card.attached_cards if c.card_type == CardType.WORKER)
+                fuel += card.fuel_production * workers_attached
+
+        fuel_production = min(oil, fuel)
+        oil -= fuel_production
+        fuel = fuel_production
+
+        return oil, fuel
 
     def calculate_resurects_production(self, player: Player):
         iron = 0
@@ -571,6 +588,231 @@ class GameLogic:
         player.initiative -= 5
         self.add_message("Wzięto kartę ze stosu odrzuconych!", "success")
         return True
+
+    def get_attackers(self) -> List[Card]:
+        """Zwraca listę żołnierzy na froncie, którzy mają ekwipunek z zasięgiem > 0."""
+        player = self.current_player
+        attackers = []
+        for card in player.zones.get(Zone.FRONT, []):
+            if card.card_type == CardType.SOLDIER:
+                # Sprawdź, czy ma dołączony ekwipunek z zasięgiem > 0
+                for attached in card.attached_cards:
+                    if attached.attack_range > 0:
+                        attackers.append(card)
+                        break
+        return attackers
+
+    def get_defenders(self, target_player: Player) -> List[Card]:
+        """
+        Zwraca listę kart przeciwnika w kolejności priorytetu:
+        FRONT, SECOND, BACK, STATE (tylko tereny).
+        """
+        zones_order = [Zone.FRONT, Zone.SECOND, Zone.BACK]
+        defenders = []
+        for zone in zones_order:
+            for card in target_player.zones.get(zone, []):
+                if card.card_type == CardType.SOLDIER:
+                    defenders.append(card)
+            if defenders:
+                return defenders
+        # Jeśli brak żołnierzy, zwracamy tereny z STATE (do rabunku)
+        for card in target_player.zones.get(Zone.STATE, []):
+            if card.card_type == CardType.TERRAIN:
+                defenders.append(card)
+        return defenders
+
+    def perform_attack(self, attacker: Card, target_player: Player) -> bool:
+        """
+        Wykonuje atak z karty 'attacker' na przeciwnika.
+        Wybiera cel automatycznie zgodnie z priorytetem.
+        """
+        if attacker not in self.get_attackers():
+            self.add_message("Ten żołnierz nie może atakować (brak broni z zasięgiem)!", "error")
+            return False
+
+        defenders = self.get_defenders(target_player)
+        if not defenders:
+            self.add_message("Przeciwnik nie ma żadnych celów do ataku!", "error")
+            return False
+
+        # Wybieramy pierwszy cel z listy (zgodnie z priorytetem)
+        target = defenders[0]
+
+        # Sprawdź, czy target to teren (rabunek)
+        if target.card_type == CardType.TERRAIN:
+            # Przenieś teren do swojego państwa
+            target_player.zones[Zone.STATE].remove(target)
+            self.current_player.zones[Zone.STATE].append(target)
+            self.add_message(f"Zdobyto teren: {target.name}!", "success")
+            return True
+
+        # Atak na żołnierza – uproszczona logika (można rozbudować o statystyki)
+        # Na razie usuwamy cel (zakładamy, że ginie)
+        for zone in [Zone.FRONT, Zone.SECOND, Zone.BACK]:
+            if target in target_player.zones[zone]:
+                target_player.zones[zone].remove(target)
+                break
+        self.add_message(f"Zabito żołnierza {target.name}!", "success")
+        return True    
+
+    def select_attacker(self, soldier: Card) -> bool:
+        print("select_attacker called")
+        if soldier.card_type != CardType.SOLDIER:
+            self.add_message("Tylko żołnierze mogą atakować!", "error")
+            print("select_attacker failed: not a soldier")
+            return False
+        # POPRAWA: self.current_player.zones zamiast self.zones
+        if soldier not in self.current_player.zones.get(Zone.FRONT, []):
+            self.add_message("Żołnierz musi być na froncie!", "error")
+            print("select_attacker failed: not on front")
+            return False
+        can_attack = any(a.attack_range > 0 for a in soldier.attached_cards)
+        if not can_attack:
+            self.add_message("Ten żołnierz nie ma broni z zasięgiem!", "error")
+            print("select_attacker failed: no attack range")
+            return False
+
+        targets = []
+        for player in self.players:
+            if player == self.current_player:
+                continue
+            defenders = self.get_defenders(player)
+            print(f"DEBUG: Gracz {player.name} ma obrońców: {[d.name_key for d in defenders]}")
+            if defenders:
+                targets.append((player, defenders))
+            print(f"DEBUG: targets = {[(p.name, [d.name_key for d in d_list]) for p, d_list in targets]}")
+        if not targets:
+            self.add_message("Brak celów do ataku!", "error")
+            print("select_attacker failed: no targets")
+            return False
+
+        self.selected_attacker = soldier
+        self.attack_mode = True
+        self.attack_targets = targets
+        #self.deselect_card()
+        self.add_message("Wybierz przeciwnika do ataku (podświetlony)", "info")
+        print("select_attacker success")
+        return True
+
+    def get_attack_targets(self) -> List[Tuple[Player, List[Card]]]:
+        """Zwraca listę przeciwników z ich obrońcami."""
+        return self.attack_targets if self.attack_mode else []
+
+    def is_attack_mode(self) -> bool:
+        return self.attack_mode
+
+    def cancel_attack(self):
+        self.attack_mode = False
+        self.attack_targets = []
+        self.selected_attacker = None
+
+    def perform_attack_on_player(self, target_player: Player, attack_range: int = 3) -> bool:
+        if not self.attack_mode or self.selected_attacker is None:
+            return False
+        defenders = self.get_defenders(target_player)  # ta metoda zwraca już w priorytecie
+        # Filtruj obrońców według zasięgu
+        if attack_range == 1:
+            # Tylko FRONT
+            defenders = [d for d in defenders if self.get_zone_of_card(d) == Zone.FRONT]
+        elif attack_range == 2:
+            # FRONT i SECOND
+            defenders = [d for d in defenders if self.get_zone_of_card(d) in [Zone.FRONT, Zone.SECOND]]
+        # attack_range == 3 – wszyscy
+        if not defenders:
+            self.add_message(f"Brak celów w zasięgu {attack_range}!", "error")
+            return False
+        target = defenders[0]
+        if self.perform_attack(self.selected_attacker, target_player):
+            self.cancel_attack()
+            return True
+        return False
+
+    def get_attack_summary(self) -> Dict[int, Dict[str, int]]:
+        """
+        Oblicza sumę ataku dla każdego zasięgu (1, 2, 3) dla wszystkich żołnierzy na froncie.
+        Zwraca słownik: { zasięg: {"soft": X, "hard": Y, "air": Z} }
+        """
+        summary = {1: {"soft": 0, "hard": 0, "air": 0},
+                2: {"soft": 0, "hard": 0, "air": 0},
+                3: {"soft": 0, "hard": 0, "air": 0}}
+        
+        player = self.current_player
+        for card in player.zones.get(Zone.FRONT, []):
+            if card.card_type != CardType.SOLDIER:
+                continue
+            for attached in card.attached_cards:
+                attack_range = attached.attack_range
+                if attack_range > 0 and attack_range <= 3:
+                    # Dodaj ataki dla każdego typu
+                    for target_type, value in attached.attack.items():
+                        if target_type in summary[attack_range]:
+                            summary[attack_range][target_type] += value
+        return summary
+
+    def get_zone_of_card(self, card: Card) -> Optional[Zone]:
+        player = self.current_player
+        for zone, cards in player.zones.items():
+            if card in cards:
+                return zone
+        return None
+
+    def perform_attack_with_range(self, attack_range: int) -> bool:
+        """
+        Wykonuje atak z zasięgiem attack_range (1, 2 lub 3) na pierwszego przeciwnika,
+        który ma cele w dostępnych strefach.
+        """
+        if not self.current_player:
+            return False
+        
+        # Znajdź wszystkich przeciwników
+        opponents = [p for p in self.players if p != self.current_player]
+        if not opponents:
+            self.add_message("Brak przeciwników!", "error")
+            return False
+        
+        # Dla każdego przeciwnika, sprawdzaj strefy w kolejności: FRONT, SECOND, BACK, STATE (tylko tereny)
+        # Atak o zasięgu 1: tylko FRONT
+        # Atak o zasięgu 2: FRONT, SECOND
+        # Atak o zasięgu 3: FRONT, SECOND, BACK (i STATE tereny, jeśli brak żołnierzy)
+        zone_order = [Zone.FRONT]
+        if attack_range >= 2:
+            zone_order.append(Zone.SECOND)
+        if attack_range >= 3:
+            zone_order.append(Zone.BACK)
+            # STATE (tereny) – tylko gdy brak żołnierzy
+        else:
+            # Dla zasięgu 1 i 2, STATE nie jest dostępne (chyba że brak żołnierzy)
+            pass
+        
+        # Szukaj przeciwników w podanych strefach
+        for target_player in opponents:
+            for zone in zone_order:
+                defenders = []
+                for card in target_player.zones.get(zone, []):
+                    if card.card_type == CardType.SOLDIER:
+                        defenders.append(card)
+                if defenders:
+                    # Wybierz pierwszego obrońcę
+                    target = defenders[0]
+                    # Wykonaj atak (użyj istniejącej metody perform_attack)
+                    # Ale perform_attack wybiera cel sam – musimy przekazać konkretny cel
+                    # Możemy zmodyfikować perform_attack lub dodać nową metodę
+                    if self.perform_attack_on_target(target_player, target, attack_range):
+                        return True
+                    else:
+                        return False
+            # Jeśli w strefach żołnierskich brak, sprawdź STATE (tereny) – tylko dla zasięgu 3
+            if attack_range >= 3:
+                for card in target_player.zones.get(Zone.STATE, []):
+                    if card.card_type == CardType.TERRAIN:
+                        # Rabunek terenu
+                        target_player.zones[Zone.STATE].remove(card)
+                        self.current_player.zones[Zone.STATE].append(card)
+                        self.add_message(f"Zdobyto teren: {card.name}!", "success")
+                        return True
+        
+        self.add_message("Brak celów do ataku w zasięgu!", "error")
+        return False
 
     def load_game_config(self) -> dict:
         try:
