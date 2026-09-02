@@ -52,12 +52,142 @@ class GameView:
 
         self.end_turn_button_rect = pygame.Rect(0, 0, 200, 50)
         self.discard_rect = pygame.Rect(0, 0, 100, 140)
+        self.attack_buttons = {}
+
+        self.attack_preview_rect = None
+        self.confirm_button_rect = None
+        self.cancel_button_rect = None
 
         # ---------- SYSTEM KOMUNIKATÓW ----------
         self.messages = []
         self.message_duration = 5.0
         self.message_font_size = 28
         self.message_padding = 15
+
+
+    def draw_attack_preview(self):
+        """Rysuje podgląd ataku jako nakładkę."""
+        data = self.logic.get_attack_preview_data()
+        if not data:
+            return
+
+        # Przyciemnij tło
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        # Wymiary podglądu
+        preview_width = int(self.screen_width * 0.75)
+        preview_height = int(self.screen_height * 0.75)
+        preview_x = (self.screen_width - preview_width) // 2
+        preview_y = (self.screen_height - preview_height) // 2
+        self.attack_preview_rect = pygame.Rect(preview_x, preview_y, preview_width, preview_height)
+
+        # Tło podglądu
+        draw_alpha_rect(
+            self.screen,
+            preview_x, preview_y, preview_width, preview_height,
+            (40, 40, 60), 255,
+            (200, 200, 200), 2
+        )
+
+        # Tytuł
+        title = f"Podgląd ataku na {data['target_player'].name} (strefa: {data['target_zone'].value})"
+        title_surf, _ = fonts.render_text(title, size_key="StoryScript M", color=WHITE, center=(self.screen_width//2, preview_y + 40))
+        self.screen.blit(title_surf, title_surf.get_rect(center=(self.screen_width//2, preview_y + 40)))
+
+        # Podziel na dwie części: górna – cele, dolna – atakujący
+        half_height = (preview_height - 80) // 2
+        # Cele (przeciwnik)
+        defenders = data["defenders"]
+        attackers = data["attackers"]
+
+        # Rysuj etykiety
+        label_y = preview_y + 70
+        label_surf, _ = fonts.render_text("Cele przeciwnika:", size_key="StoryScript S", color=WHITE, topleft=(preview_x + 20, label_y))
+        self.screen.blit(label_surf, (preview_x + 20, label_y))
+
+        # Rysuj karty celów
+        card_width = 100
+        card_height = 140
+        spacing = 25
+        start_x = preview_x + 20
+        card_y = label_y + 45
+        for i, card in enumerate(defenders):
+            x = start_x + i * (card_width + spacing)
+            view = CardView(card, self.localization)
+            view.update_rect(x, card_y, card_width, card_height)
+            view.draw(self.screen, x, card_y, card_width, card_height, language=self.logic.language)
+            self.card_views.append(view)
+
+            if card.attached_cards:
+                attach_offset_x = 25
+                attach_offset_y = 25
+                attach_width = card_width
+                attach_height = card_height
+                for j, attach_card in enumerate(card.attached_cards):
+                    ax = x + attach_offset_x * (j + 1)
+                    ay = card_y + attach_offset_y * (j + 1)
+                    attach_view = CardView(attach_card, self.localization)
+                    attach_view.update_rect(ax, ay, attach_width, attach_height)
+                    attach_view.draw(self.screen, ax, ay, attach_width, attach_height, language=self.logic.language)
+                    self.card_views.append(attach_view)
+
+        # Atakujący (gracz)
+        label_y2 = preview_y + 70 + half_height
+        label_surf2, _ = fonts.render_text("Twoje jednostki atakujące:", size_key="StoryScript S", color=WHITE, topleft=(preview_x + 20, label_y2))
+        self.screen.blit(label_surf2, (preview_x + 20, label_y2))
+
+        # Rysuj karty atakujących
+        card_y2 = label_y2 + 45
+        for i, card in enumerate(attackers):
+            x = start_x + i * (card_width + spacing)
+            view = CardView(card, self.localization)
+            view.update_rect(x, card_y2, card_width, card_height)
+            view.draw(self.screen, x, card_y2, card_width, card_height, language=self.logic.language)
+            self.card_views.append(view)
+
+            if card.attached_cards:
+                attach_offset_x = 25
+                attach_offset_y = 25
+                attach_width = card_width
+                attach_height = card_height
+                for j, attach_card in enumerate(card.attached_cards):
+                    ax = x + attach_offset_x * (j + 1)
+                    ay = card_y2 + attach_offset_y * (j + 1)
+                    attach_view = CardView(attach_card, self.localization)
+                    attach_view.update_rect(ax, ay, attach_width, attach_height)
+                    attach_view.draw(self.screen, ax, ay, attach_width, attach_height, language=self.logic.language)
+                    self.card_views.append(attach_view)
+
+        # Przycisk "Potwierdź"
+        btn_width = 200
+        btn_height = 50
+        btn_x = preview_x + preview_width - btn_width - 20
+        btn_y = preview_y + preview_height - btn_height - 20
+        self.confirm_button_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+        draw_button(
+            self.screen,
+            btn_x, btn_y, btn_width, btn_height,
+            "Potwierdź",
+            fonts.get_font("StoryScript M"),
+            (0, 200, 0),
+            WHITE,
+            hover=False
+        )
+
+        # Przycisk "Anuluj"
+        btn_x2 = btn_x - btn_width - 10
+        self.cancel_button_rect = pygame.Rect(btn_x2, btn_y, btn_width, btn_height)
+        draw_button(
+            self.screen,
+            btn_x2, btn_y, btn_width, btn_height,
+            "Anuluj",
+            fonts.get_font("StoryScript M"),
+            (200, 0, 0),
+            WHITE,
+            hover=False
+        )
 
     def add_message(self, text: str, msg_type: str = "info"):
         colors = {
@@ -113,6 +243,7 @@ class GameView:
         self.draw_hand()
         self.draw_initiative_bar()
         self.draw_resources()
+        self.draw_attack_preview()
         self.draw_tooltip()
         self.draw_preview()
         self.draw_end_turn()
@@ -269,49 +400,42 @@ class GameView:
 
                     if self.logic.selected_card is not None and self.logic.can_attach_to_card(self.logic.selected_card, card):
                         pygame.draw.rect(self.screen, (0, 255, 0), view.rect, 2)
-                            
-                    if zone == Zone.FRONT:
-                        summary = self.logic.get_attack_summary()
-                        # Dla każdego zasięgu, jeśli ma atak, rysuj przycisk
-                        btn_x = rect.right - 70
-                        btn_y = rect.y + 8
-                        btn_width = 60
-                        btn_height = 25
-                        btn_spacing = 4
-                        
-                        # Zbierz przyciski dla zasięgów 1,2,3
-                        self.attack_buttons = {}
-                        for r in [1, 2, 3]:
-                            s = summary[r]
-                            if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
-                                # Przycisk dla zasięgu r
-                                btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
-                                self.attack_buttons[r] = btn_rect
-                                
-                                # Tekst przycisku
-                                parts = []
-                                if s["soft"] > 0:
-                                    parts.append(f"S{s['soft']}")
-                                if s["hard"] > 0:
-                                    parts.append(f"H{s['hard']}")
-                                if s["air"] > 0:
-                                    parts.append(f"A{s['air']}")
-                                label = f"Z{r}: " + ",".join(parts) if parts else f"Z{r}"
-                                
-                                draw_button(
-                                    self.screen,
-                                    btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,
-                                    label,
-                                    fonts.get_font("StoryScript XXS"),
-                                    (200, 50, 50),
-                                    WHITE,
-                                    hover=False
-                                )
-                                btn_y += btn_height + btn_spacing
-                            else:
-                                # Jeśli nie ma ataku dla tego zasięgu, nie rysuj przycisku
-                                pass          
 
+                # ---------- PRZYCISKI ATAKU ----------
+                if zone == Zone.FRONT:
+                    summary = self.logic.get_attack_summary()
+                    self.attack_buttons = {}
+                    btn_x = rect.right - 100
+                    btn_y = rect.y + 8
+                    btn_width = 90
+                    btn_height = 25
+                    btn_spacing = 4
+
+                    for r in [1, 2, 3]:
+                        s = summary.get(r, {"soft": 0, "hard": 0, "air": 0})
+                        if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
+                            btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+                            self.attack_buttons[r] = btn_rect
+
+                            parts = []
+                            if s["soft"] > 0:
+                                parts.append(f"Soft: {s['soft']}")
+                            if s["hard"] > 0:
+                                parts.append(f"Hard: {s['hard']}")
+                            if s["air"] > 0:
+                                parts.append(f"Air: {s['air']}")
+                            label = f"Zasięg: {r}: " + ",".join(parts)
+
+                            draw_button(
+                                self.screen,
+                                btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,
+                                label,
+                                fonts.get_font("StoryScript XXS"),
+                                (200, 50, 50),
+                                WHITE,
+                                hover=False
+                            )
+                            btn_y += btn_height + btn_spacing
             else:
                 empty_surf, _ = fonts.render_text(
                     "pusta",
@@ -344,7 +468,6 @@ class GameView:
             offset = i * 2
             self.screen.blit(self.card_back_image, (deck_x + offset, deck_y - offset))
 
-        # Licznik z tłem
         count_text = str(len(player.deck))
         font = fonts.get_font("StoryScript XS")
         draw_text_bg(
@@ -398,7 +521,6 @@ class GameView:
             offset = i * 2
             self.screen.blit(self.card_back_image, (discard_x + offset, discard_y - offset))
 
-        # Licznik z tłem – użycie draw_text_bg
         count_text = str(len(player.discard))
         font = fonts.get_font("StoryScript M")
         draw_text_bg(
@@ -593,6 +715,22 @@ class GameView:
         if button == 1:
             if self.end_turn_button_rect.collidepoint(pos):
                 return "end_turn"
+            
+            if self.logic.is_attack_preview_mode():
+                if self.confirm_button_rect and self.confirm_button_rect.collidepoint(pos):
+                    if self.logic.confirm_attack():
+                        return ("attack_success", None)
+                    else:
+                        return ("attack_fail", None)
+                elif self.cancel_button_rect and self.cancel_button_rect.collidepoint(pos):
+                    self.logic.cancel_attack_preview()
+                    return ("attack_cancel", None)
+                else:
+                    # Kliknięcie poza przyciskami – anuluj podgląd (opcjonalnie)
+                    # self.logic.cancel_attack_preview()
+                    # return ("attack_cancel", None)
+                    return None
+    
             deck_rect = pygame.Rect(50, self.screen_height - 220, 100, 140)
             if hasattr(self, 'discard_rect') and self.discard_rect.collidepoint(pos):
                 if self.logic.selected_card is not None and self.logic.selected_card in self.logic.current_player.hand:
@@ -604,22 +742,15 @@ class GameView:
                         return None
             if deck_rect.collidepoint(pos):
                 return "draw"
+            
+            # PRZYCISKI ATAKU
             if hasattr(self, 'attack_buttons') and self.attack_buttons:
                 for attack_range, btn_rect in self.attack_buttons.items():
                     if btn_rect.collidepoint(pos):
-                        # Znajdź pierwszego przeciwnika z obrońcami
-                        for player in self.logic.players:
-                            if player == self.logic.current_player:
-                                continue
-                            defenders = self.logic.get_defenders(player)
-                            if defenders:
-                                if self.logic.perform_attack_on_player(player, attack_range):
-                                    return ("attack_success", None)
-                                else:
-                                    return ("attack_fail", None)
-                        # Jeśli nie ma celów
-                        self.logic.add_message("Brak celów do ataku!", "error")
-                        return ("attack_fail", None)
+                        if self.logic.start_attack_with_range(attack_range):
+                            return ("attack_select", None)
+                        else:
+                            return ("attack_fail", None)
 
             player = self.logic.current_player
 
@@ -642,18 +773,7 @@ class GameView:
                             else:
                                 return ("deselect", None)
                         else:
-                            # Jeśli to żołnierz na froncie z bronią – atak
-                            if view.card.card_type == CardType.SOLDIER:
-                                if self.logic.get_zone_of_card(view.card) == Zone.FRONT:
-                                    print(f"DEBUG: Żołnierz {view.card.name_key} ma załączniki: {[a.name_key for a in view.card.attached_cards]}")
-                                    can_attack = any(a.attack_range > 0 for a in view.card.attached_cards)
-                                    print(f"Clicked soldier on front. Can attack: {can_attack}")
-                                    if can_attack:
-                                        if self.logic.select_attacker(view.card):
-                                            return ("attack_select", None)
-                                        else:
-                                            return ("attack_fail", None)
-                            # Jeśli nie żołnierz lub nie ma broni – przenoszenie (jeśli żołnierz)
+                            # Karta w strefie – tylko przenoszenie (żołnierz)
                             if view.card.card_type == CardType.SOLDIER:
                                 if self.logic.select_soldier_for_move(view.card):
                                     return ("move_select", None)
@@ -668,14 +788,19 @@ class GameView:
                     else:
                         return None
                     
+            # Kliknięcie w panel przeciwnika w trybie ataku
             if self.logic.is_attack_mode():
                 for opponent, rect in self.opponent_rects:
                     if rect.collidepoint(pos):
-                        if self.logic.perform_attack_on_player(opponent):
-                            return ("attack_success", None)
-                        else:
-                            return ("attack_fail", None)
-
+                        attack_zones = self.logic.get_attack_zones()
+                        zones_for_opponent = attack_zones.get(opponent, [])
+                        if zones_for_opponent:
+                            zone = zones_for_opponent[0]  # wybierz pierwszą dostępną strefę
+                            if self.logic.prepare_attack_preview(opponent, zone):
+                                return ("attack_preview", None)
+                            else:
+                                return ("attack_fail", None)
+                            
             return ("deselect", None)
         elif button == 3:
             for view in self.card_views:
@@ -712,20 +837,15 @@ class GameView:
             self.opponent_rects.append((opponent, rect))
 
     def _draw_opponent_panel(self, opponent, rect):
-
-        #print(f"Attack mode: {self.logic.is_attack_mode()}, targets: {self.logic.get_attack_targets()}")
-
         draw_alpha_rect(
             self.screen,
             rect.x, rect.y, rect.width, rect.height,
             (50, 50, 50), 50,
             (200, 200, 200), 2
-        )        
+        )
 
-        is_attack_target = self.logic.is_attack_mode() and any(p == opponent for p, _ in self.logic.get_attack_targets())
-
-        if is_attack_target:
-            pygame.draw.rect(self.screen, (150, 150, 150), rect, 2)  # czerwona ramka
+        attack_zones = self.logic.get_attack_zones()
+        attack_zones_for_opponent = attack_zones.get(opponent, [])
 
         name_surf, _ = fonts.render_text(
             opponent.name,
@@ -752,6 +872,11 @@ class GameView:
             text = f"{zone_names[zone]}: {count}"
             surf = font.render(text, True, (200, 200, 200))
             self.screen.blit(surf, (rect.x + 10, rect.y + y_offset))
+
+            # Podświetlenie strefy, jeśli jest celem ataku
+            if zone in attack_zones_for_opponent:
+                zone_rect = pygame.Rect(rect.x + 10, rect.y + y_offset, rect.width - 20, line_height - 4)
+                pygame.draw.rect(self.screen, (255, 0, 0), zone_rect, 2)
 
             if cards:
                 card_width = 40

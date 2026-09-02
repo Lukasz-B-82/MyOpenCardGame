@@ -443,12 +443,13 @@ cards["card_28"] = {
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
-    attack_range = 1,
+    attack_range = 0,
     target_type = { TargetsTypes.SOFT },
     defense = 2,
-    image = "28.png",
+    image = "pistol.png",
     frame_key = "01"
 }
+
 cards["card_29"] = {
     name_key = "card_29_name",
     type = CardType.WEAPON,
@@ -458,11 +459,11 @@ cards["card_29"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = 1,
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
-    attack_range = 1,
+    attack_range = 0,
     target_type = { TargetsTypes.SOFT },
     defense = 2,
     image = "29.png",
@@ -1092,6 +1093,25 @@ cards["card_70"] = {
     allowed_zones = { Zone.STATE },
     allowed_attachments = {},
     image = "70.jfif",
+    frame_key = "01"
+}
+cards["card_71"] = {
+    name_key = "card_71_name",
+    type = CardType.WEAPON,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 1,
+    cost_production = 1,
+    allowed_zones = {},
+    allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.HARD] = 0,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 0,
+    target_type = { TargetsTypes.SOFT },
+    defense = 2,
+    image = "28.png",
     frame_key = "01"
 }
 return cards
