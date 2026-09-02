@@ -464,16 +464,24 @@ class GameLogic:
         return True
 
     # ---------- NOWY SYSTEM ATAKU (tylko przyciski) ----------
-    def get_attackers(self) -> List[Card]:
-        """Zwraca listę żołnierzy na froncie, którzy mają ekwipunek z zasięgiem > 0."""
+    def get_attackers(self, attack_range: Optional[int] = None) -> List[Card]:
+        """
+        Zwraca listę żołnierzy na froncie, którzy mają ekwipunek o zasięgu >= attack_range.
+        Jeśli attack_range to None, zwraca wszystkich z jakąkolwiek bronią (zasięg > 0).
+        """
         player = self.current_player
         attackers = []
         for card in player.zones.get(Zone.FRONT, []):
-            if card.card_type == CardType.SOLDIER:
-                for attached in card.attached_cards:
-                    if attached.attack_range > 0:
-                        attackers.append(card)
+            if card.card_type != CardType.SOLDIER:
+                continue
+            has_weapon = False
+            for attached in card.attached_cards:
+                if attached.attack_range > 0:
+                    if attack_range is None or attached.attack_range >= attack_range:
+                        has_weapon = True
                         break
+            if has_weapon:
+                attackers.append(card)
         return attackers
 
     def get_defenders(self, target_player: Player) -> List[Card]:
@@ -493,20 +501,29 @@ class GameLogic:
         return defenders
 
     def get_attack_summary(self) -> Dict[int, Dict[str, int]]:
-        """Oblicza sumę ataku dla każdego zasięgu (1, 2, 3)."""
-        summary = {1: {"soft": 0, "hard": 0, "air": 0},
-                   2: {"soft": 0, "hard": 0, "air": 0},
-                   3: {"soft": 0, "hard": 0, "air": 0}}
+        """Oblicza skumulowaną sumę ataku dla każdego zasięgu (1, 2, 3).
+        Dla zasięgu 1: wszystkie bronie z range >= 1.
+        Dla zasięgu 2: wszystkie bronie z range >= 2.
+        Dla zasięgu 3: wszystkie bronie z range >= 3.
+        """
+        summary = {
+            1: {"soft": 0, "hard": 0, "air": 0},
+            2: {"soft": 0, "hard": 0, "air": 0},
+            3: {"soft": 0, "hard": 0, "air": 0}
+        }
         player = self.current_player
         for card in player.zones.get(Zone.FRONT, []):
             if card.card_type != CardType.SOLDIER:
                 continue
             for attached in card.attached_cards:
                 attack_range = attached.attack_range
-                if attack_range > 0 and attack_range <= 3:
+                if attack_range <= 0 or attack_range > 3:
+                    continue
+                # Dla każdego zasięgu r, jeśli attack_range >= r, dodajemy wartość
+                for r in range(1, attack_range + 1):
                     for target_type, value in attached.attack.items():
-                        if target_type in summary[attack_range]:
-                            summary[attack_range][target_type] += value
+                        if target_type in summary[r]:
+                            summary[r][target_type] += value
         return summary
 
     def get_attack_zones_for_range(self, attack_range: int) -> Dict[Player, List[Zone]]:
@@ -551,8 +568,8 @@ class GameLogic:
 
     def start_attack_with_range(self, attack_range: int) -> bool:
         """Rozpoczyna tryb ataku z zadanym zasięgiem."""
-        if not self.get_attackers():
-            self.add_message("Brak jednostek zdolnych do ataku!", "error")
+        if not self.get_attackers(attack_range):
+            self.add_message(f"Brak jednostek z bronią o zasięgu >= {attack_range}!", "error")
             return False
         targets = self.get_attack_zones_for_range(attack_range)
         has_targets = any(zones for zones in targets.values() if zones)
@@ -562,7 +579,7 @@ class GameLogic:
         self.attack_mode = True
         self.attack_range = attack_range
         self.attack_zones = targets
-        self.add_message(f"Wybierz strefę docelową (podświetlona)", "info")
+        self.add_message("Wybierz strefę docelową (podświetlona)", "info")
         return True
 
     def get_attack_zones(self) -> Dict[Player, List[Zone]]:
@@ -630,7 +647,6 @@ class GameLogic:
         if target_zone not in allowed_zones:
             return False
 
-        # Znajdź cele w strefie docelowej
         defenders = []
         if target_zone == Zone.STATE:
             for card in target_player.zones.get(Zone.STATE, []):
@@ -645,13 +661,12 @@ class GameLogic:
             self.add_message("Brak celów w tej strefie!", "error")
             return False
 
-        # Znajdź atakujących (żołnierze na froncie z bronią)
-        attackers = self.get_attackers()
+        # Używamy zapamiętanego zasięgu do wyboru atakujących
+        attackers = self.get_attackers(self.attack_range)
         if not attackers:
             self.add_message("Brak jednostek zdolnych do ataku!", "error")
             return False
 
-        # Przygotuj dane podglądu
         self.attack_preview_data = {
             "target_player": target_player,
             "target_zone": target_zone,
@@ -679,6 +694,22 @@ class GameLogic:
     def is_attack_preview_mode(self) -> bool:
         return self.attack_preview_data is not None
 
+    def get_defense_type(self, card: Card) -> Optional[str]:
+        """
+        Zwraca typ obrony karty na podstawie jej dołączonych kart (bronie).
+        Zwraca pierwszy target_type z karty, która ma defense > 0.
+        """
+        for attached in card.attached_cards:
+            if attached.defense > 0 and attached.target_type and len(attached.target_type) > 0:
+                return attached.target_type[0].upper(), attached.defense
+        return None
+
+    def get_card_attack(self, card: Card) -> Dict[str, int]:
+
+        for attached in card.attached_cards:
+            if attached.attack and len(attached.attack) > 0:
+                return attached.attack
+        return {}
 
     def load_game_config(self) -> dict:
         try:

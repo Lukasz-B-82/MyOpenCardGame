@@ -112,13 +112,42 @@ class GameView:
         card_height = 140
         spacing = 25
         start_x = preview_x + 20
-        card_y = label_y + 45
+        card_y = label_y + 70
         for i, card in enumerate(defenders):
             x = start_x + i * (card_width + spacing)
             view = CardView(card, self.localization)
             view.update_rect(x, card_y, card_width, card_height)
             view.draw(self.screen, x, card_y, card_width, card_height, language=self.logic.language)
             self.card_views.append(view)
+
+            # Etykieta obrony (używamy target_type)
+            defense_type, defense_value = self.logic.get_defense_type(card)
+            if defense_type:
+                label = f"{defense_type} [Obrona: {defense_value}]"
+                draw_text_bg(
+                    self.screen, label,
+                    fonts.get_font("StoryScript XXS"),
+                    (200, 200, 255),
+                    x, card_y - 35,
+                    padding=8, bg_color=(20,20,20), bg_alpha=150
+                )    
+
+            # Kontratak (atak własny karty)
+            card_attack = self.logic.get_card_attack(card)
+            attack_parts = []
+            for atype in ["soft", "hard", "air"]:
+                value = card_attack.get(atype, 0)
+                if value > 0:
+                    attack_parts.append(f"{atype.upper()}({value})")
+            if attack_parts:
+                label = "Atak: " + ", ".join(attack_parts)
+                draw_text_bg(
+                    self.screen, label,
+                    fonts.get_font("StoryScript XXS"),
+                    (255, 200, 100),
+                    x, card_y + card_height + 45,
+                    padding=8, bg_color=(20,20,20), bg_alpha=180
+                )        
 
             if card.attached_cards:
                 attach_offset_x = 25
@@ -139,13 +168,24 @@ class GameView:
         self.screen.blit(label_surf2, (preview_x + 20, label_y2))
 
         # Rysuj karty atakujących
-        card_y2 = label_y2 + 45
+        card_y2 = label_y2 + 70
         for i, card in enumerate(attackers):
             x = start_x + i * (card_width + spacing)
             view = CardView(card, self.localization)
             view.update_rect(x, card_y2, card_width, card_height)
             view.draw(self.screen, x, card_y2, card_width, card_height, language=self.logic.language)
             self.card_views.append(view)
+
+            defense_type, defense_value = self.logic.get_defense_type(card)
+            if defense_type:
+                label = f"{defense_type} [Obrona: {defense_value}]"
+                draw_text_bg(
+                    self.screen, label,
+                    fonts.get_font("StoryScript XXS"),
+                    (200, 200, 255),
+                    x, card_y2 - 35,
+                    padding=8, bg_color=(20,20,20), bg_alpha=150
+                )              
 
             if card.attached_cards:
                 attach_offset_x = 25
@@ -405,9 +445,9 @@ class GameView:
                 if zone == Zone.FRONT:
                     summary = self.logic.get_attack_summary()
                     self.attack_buttons = {}
-                    btn_x = rect.right - 100
+                    btn_x = rect.right - 130
                     btn_y = rect.y + 8
-                    btn_width = 90
+                    btn_width = 120
                     btn_height = 25
                     btn_spacing = 4
 
@@ -424,7 +464,7 @@ class GameView:
                                 parts.append(f"Hard: {s['hard']}")
                             if s["air"] > 0:
                                 parts.append(f"Air: {s['air']}")
-                            label = f"Zasięg: {r}: " + ",".join(parts)
+                            label = f"Zasięg: {r}: " + ", ".join(parts)
 
                             draw_button(
                                 self.screen,

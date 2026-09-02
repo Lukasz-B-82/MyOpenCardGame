@@ -1114,4 +1114,24 @@ cards["card_71"] = {
     image = "28.png",
     frame_key = "01"
 }
+cards["card_72"] = {
+    name_key = "card_72_name",
+    type = CardType.ARTILLERY,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 6,
+    cost_production = 6,
+    cost_steal = 5,
+    allowed_zones = {},
+    allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = 3,
+        [TargetsTypes.HARD] = 1,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 2,
+    target_type = { TargetsTypes.SOFT },
+    defense = 1,
+    image = "72.png",
+    frame_key = "01"
+}
 return cards

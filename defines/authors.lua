@@ -142,5 +142,7 @@ authors["ms designer"] = {
     type = AuthorsType.AI,
     images = {
        '/images/cards/63.png',
+       '/images/cards/72.png',
+       '/images/cards/pistol.png',
     }
 }
