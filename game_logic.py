@@ -38,6 +38,7 @@ class GameLogic:
         self.attack_zones: Dict[Player, List[Zone]] = {}
 
         self.attack_preview_data: Optional[Dict] = None
+        self.attack_source_zone: Optional[Zone] = None
 
         self.view = None  # referencja do widoku
         
@@ -233,6 +234,7 @@ class GameLogic:
         self.attack_mode = False
         self.attack_range = 0
         self.attack_zones = {}
+        self.attack_source_zone = None
 
     def get_move_targets(self) -> List[Zone]:
         return self.move_targets if self.move_mode else []
@@ -500,87 +502,101 @@ class GameLogic:
                 defenders.append(card)
         return defenders
 
-    def get_attack_summary(self) -> Dict[int, Dict[str, int]]:
-        """Oblicza skumulowaną sumę ataku dla każdego zasięgu (1, 2, 3).
-        Dla zasięgu 1: wszystkie bronie z range >= 1.
-        Dla zasięgu 2: wszystkie bronie z range >= 2.
-        Dla zasięgu 3: wszystkie bronie z range >= 3.
+    def get_attack_summary(self, zone: Zone) -> Dict[int, Dict[str, int]]:
         """
+        Oblicza skumulowaną sumę ataku dla każdego zasięgu (1, 2, 3)
+        dla danej strefy (FRONT, SECOND, BACK).
+        Dla FRONT: uwzględnia bronie z range >= 1 (czyli wszystkie).
+        Dla SECOND: uwzględnia bronie z range >= 2.
+        Dla BACK: uwzględnia bronie z range >= 3.
+        """
+        # minimalny zasięg dla strefy
+        min_range = {Zone.FRONT: 1, Zone.SECOND: 2, Zone.BACK: 3}.get(zone, 1)
         summary = {
             1: {"soft": 0, "hard": 0, "air": 0},
             2: {"soft": 0, "hard": 0, "air": 0},
             3: {"soft": 0, "hard": 0, "air": 0}
         }
         player = self.current_player
-        for card in player.zones.get(Zone.FRONT, []):
+        for card in player.zones.get(zone, []):
             if card.card_type != CardType.SOLDIER:
                 continue
             for attached in card.attached_cards:
                 attack_range = attached.attack_range
-                if attack_range <= 0 or attack_range > 3:
+                if attack_range < min_range or attack_range > 3:
                     continue
-                # Dla każdego zasięgu r, jeśli attack_range >= r, dodajemy wartość
-                for r in range(1, attack_range + 1):
+                # Dla każdego zasięgu r od min_range do attack_range
+                for r in range(min_range, attack_range + 1):
                     for target_type, value in attached.attack.items():
                         if target_type in summary[r]:
                             summary[r][target_type] += value
         return summary
 
-    def get_attack_zones_for_range(self, attack_range: int) -> Dict[Player, List[Zone]]:
+    def get_attack_zones_for_range(self, attack_range: int, source_zone: Zone) -> Dict[Player, List[Zone]]:
         """
         Zwraca słownik: dla każdego przeciwnika listę stref, które mogą być zaatakowane.
         Uwzględnia priorytet: FRONT → SECOND → BACK → STATE (tylko tereny, jeśli brak żołnierzy).
-        attack_range określa liczbę najbliższych stref z żołnierzami (1, 2 lub 3).
-        Jeśli attack_range=1, wybiera pierwszą niepustą strefę (FRONT, jeśli nie ma to SECOND, itd.).
-        Jeśli attack_range=2, wybiera dwie pierwsze niepuste strefy.
-        Jeśli attack_range>=3, wybiera wszystkie strefy (w tym STATE tereny, jeśli brak żołnierzy).
+        Maksymalna liczba stref zależy od źródła:
+        - FRONT: attack_range stref
+        - SECOND: attack_range - 1 stref
+        - BACK: attack_range - 2 stref (minimum 0)
         """
         result = {}
         opponents = [p for p in self.players if p != self.current_player]
+        # indeks źródła: FRONT=1, SECOND=2, BACK=3
+        source_index = {Zone.FRONT: 1, Zone.SECOND: 2, Zone.BACK: 3}.get(source_zone, 1)
+        max_targets = attack_range - (source_index - 1)
+        if max_targets <= 0:
+            return result  # brak celów
+
         for target_player in opponents:
-            # Kolejność stref: od najbliższej do najdalszej
             zone_order = [Zone.FRONT, Zone.SECOND, Zone.BACK]
-            # Zbierz strefy z żołnierzami (tylko te, które mają co najmniej jednego żołnierza)
             available_zones = []
             for zone in zone_order:
                 defenders = [card for card in target_player.zones.get(zone, []) if card.card_type == CardType.SOLDIER]
                 if defenders:
                     available_zones.append(zone)
-            # Jeśli nie ma żołnierzy w żadnej strefie, weź STATE (tereny) jako ostatnią możliwość
             if not available_zones:
-                # Sprawdź, czy są tereny w STATE
+                # jeśli brak żołnierzy, sprawdź tereny w STATE
                 for card in target_player.zones.get(Zone.STATE, []):
                     if card.card_type == CardType.TERRAIN:
                         available_zones.append(Zone.STATE)
                         break
-            # Wybierz strefy w zależności od zasięgu
-            if attack_range == 1:
-                # Tylko pierwsza niepusta strefa
-                selected_zones = available_zones[:1]
-            elif attack_range == 2:
-                # Dwie pierwsze niepuste strefy
-                selected_zones = available_zones[:2]
-            else:  # attack_range >= 3
-                # Wszystkie dostępne strefy
-                selected_zones = available_zones
-            result[target_player] = selected_zones
+            # wybierz pierwsze max_targets stref
+            selected_zones = available_zones[:max_targets]
+            if selected_zones:
+                result[target_player] = selected_zones
         return result
 
-    def start_attack_with_range(self, attack_range: int) -> bool:
-        """Rozpoczyna tryb ataku z zadanym zasięgiem."""
-        if not self.get_attackers(attack_range):
-            self.add_message(f"Brak jednostek z bronią o zasięgu >= {attack_range}!", "error")
+    def start_attack_with_range(self, attack_range: int, zone: Zone) -> bool:
+        """Rozpoczyna tryb ataku z zadanym zasięgiem i ze wskazanej strefy."""
+        attackers = self.get_attackers_from_zone(attack_range, zone)
+        if not attackers:
+            self.add_message(f"Brak jednostek z bronią o zasięgu >= {attack_range} w strefie {zone.value}!", "error")
             return False
-        targets = self.get_attack_zones_for_range(attack_range)
+        targets = self.get_attack_zones_for_range(attack_range, zone)
         has_targets = any(zones for zones in targets.values() if zones)
         if not has_targets:
-            self.add_message(f"Brak celów w zasięgu {attack_range}!", "error")
+            self.add_message(f"Brak celów w zasięgu {attack_range} z tej strefy!", "error")
             return False
         self.attack_mode = True
         self.attack_range = attack_range
         self.attack_zones = targets
+        self.attack_source_zone = zone
         self.add_message("Wybierz strefę docelową (podświetlona)", "info")
         return True
+
+    def get_attackers_from_zone(self, attack_range: int, zone: Zone) -> List[Card]:
+        """Zwraca żołnierzy w danej strefie z bronią o zasięgu >= attack_range."""
+        attackers = []
+        player = self.current_player
+        for card in player.zones.get(zone, []):
+            if card.card_type != CardType.SOLDIER:
+                continue
+            has_weapon = any(a.attack_range >= attack_range for a in card.attached_cards if a.attack_range > 0)
+            if has_weapon:
+                attackers.append(card)
+        return attackers
 
     def get_attack_zones(self) -> Dict[Player, List[Zone]]:
         return self.attack_zones if self.attack_mode else {}
@@ -592,6 +608,7 @@ class GameLogic:
         self.attack_mode = False
         self.attack_range = 0
         self.attack_zones = {}
+        self.attack_source_zone = None
 
     def perform_attack_on_zone(self, target_player: Player, zone: Zone) -> bool:
         """Wykonuje atak na konkretną strefę przeciwnika."""
@@ -640,7 +657,6 @@ class GameLogic:
         return None
 
     def prepare_attack_preview(self, target_player: Player, target_zone: Zone) -> bool:
-        """Przygotowuje dane do podglądu ataku."""
         if not self.attack_mode:
             return False
         allowed_zones = self.attack_zones.get(target_player, [])
@@ -661,8 +677,8 @@ class GameLogic:
             self.add_message("Brak celów w tej strefie!", "error")
             return False
 
-        # Używamy zapamiętanego zasięgu do wyboru atakujących
-        attackers = self.get_attackers(self.attack_range)
+        # Używamy zapamiętanej strefy źródłowej
+        attackers = self.get_attackers_from_zone(self.attack_range, self.attack_source_zone)
         if not attackers:
             self.add_message("Brak jednostek zdolnych do ataku!", "error")
             return False
@@ -672,6 +688,7 @@ class GameLogic:
             "target_zone": target_zone,
             "defenders": defenders,
             "attackers": attackers,
+            "source_zone": self.attack_source_zone,  # opcjonalnie
         }
         return True
 

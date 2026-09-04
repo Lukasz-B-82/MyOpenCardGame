@@ -92,6 +92,7 @@ class Card:
     attack_range: int = 0
     target_type: List[str] = field(default_factory=list)  # np. ["soft"]
     defense: int = 0
+    is_ranged_attack: bool = False  # czy atak jest dystansowy (np. artyleria)
     
     # ---------- METODY ----------
     def can_attach_to(self, target_card: 'Card') -> bool:
@@ -201,7 +202,8 @@ class Card:
             attack=self.attack.copy() if self.attack else {},
             attack_range=self.attack_range,
             target_type=self.target_type.copy() if self.target_type else [],
-            defense=self.defense,            
+            defense=self.defense,     
+            is_ranged_attack=self.is_ranged_attack       
         )
     
     def __repr__(self):
@@ -345,6 +347,7 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
         attack_range=int(safe_get(defn, "attack_range", 0)),
         target_type=target_type,
         defense=int(safe_get(defn, "defense", 0)),
+        is_ranged_attack=bool(safe_get(defn, "is_ranged_attack", False))
     )
 
 # Jeśli potrzebujesz singletonu dla wszystkich kart, możesz dodać:

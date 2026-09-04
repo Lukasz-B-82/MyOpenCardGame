@@ -143,6 +143,7 @@ authors["ms designer"] = {
     images = {
        '/images/cards/63.png',
        '/images/cards/72.png',
+       '/images/cards/73_cas.png',
        '/images/cards/pistol.png',
     }
 }

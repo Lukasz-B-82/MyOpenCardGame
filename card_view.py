@@ -113,6 +113,8 @@ class CardView:
             lines.append((f"Cel: {', '.join(self.card.target_type)}", (255, 255, 255)))
         if self.card.defense > 0:
             lines.append((f"Obrona: {self.card.defense}", (255, 255, 255)))
+        if self.card.is_ranged_attack:
+            lines.append((f"Atak dystansowy", (255, 255, 255)))
 
         # ---------- OBLICZANIE ROZMIARU TOOLTIPA ----------
         line_height = font_small.get_height() + 4

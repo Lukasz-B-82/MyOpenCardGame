@@ -1129,9 +1129,31 @@ cards["card_72"] = {
         [TargetsTypes.AIR] = 0
     },
     attack_range = 2,
+    is_ranged_attack = true,
+    prewent = true,
     target_type = { TargetsTypes.SOFT },
     defense = 1,
     image = "72.png",
     frame_key = "01"
+}
+cards["card_73"] = {
+    name_key = "card_73_name",
+    type = CardType.PLANE,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 12,
+    cost_production = 12,
+    cost_steal = 4,
+    allowed_zones = {},
+    allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = 4,
+        [TargetsTypes.HARD] = 1,
+        [TargetsTypes.AIR] = 1
+    },
+    attack_range = 3,
+    target_type = { TargetsTypes.AIR },
+    defense = 2,
+    image = "73_cas.png",
+    frame_key = "02"
 }
 return cards

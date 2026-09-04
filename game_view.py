@@ -64,6 +64,7 @@ class GameView:
         self.message_font_size = 28
         self.message_padding = 15
 
+        self.opponent_zone_rects = []  # lista (opponent, zone, rect)
 
     def draw_attack_preview(self):
         """Rysuje podgląd ataku jako nakładkę."""
@@ -274,6 +275,7 @@ class GameView:
     def draw(self):
         self.card_views.clear()
         self.opponent_rects.clear()
+        self.opponent_zone_rects.clear()
         self.screen.blit(self.background_image, (0, 0))
         self.draw_info()
         self.draw_opponents()
@@ -441,41 +443,47 @@ class GameView:
                     if self.logic.selected_card is not None and self.logic.can_attach_to_card(self.logic.selected_card, card):
                         pygame.draw.rect(self.screen, (0, 255, 0), view.rect, 2)
 
-                # ---------- PRZYCISKI ATAKU ----------
-                if zone == Zone.FRONT:
-                    summary = self.logic.get_attack_summary()
-                    self.attack_buttons = {}
-                    btn_x = rect.right - 130
-                    btn_y = rect.y + 8
-                    btn_width = 120
-                    btn_height = 25
-                    btn_spacing = 4
+                # ---------- PRZYCISKI ATAKU DLA KAZDEJ STREFY ----------
+                if zone in [Zone.FRONT, Zone.SECOND, Zone.BACK]:
+                    summary = self.logic.get_attack_summary(zone)  # teraz z parametrem
+                    # Sprawdź, czy w ogóle są jakieś ataki w tej strefie
+                    has_attack = any(s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0 for s in summary.values())
+                    if has_attack:
+                        # Rysuj przyciski w tej strefie
+                        btn_x = rect.right - 130
+                        btn_y = rect.y + 8
+                        btn_width = 120
+                        btn_height = 25
+                        btn_spacing = 4
 
-                    for r in [1, 2, 3]:
-                        s = summary.get(r, {"soft": 0, "hard": 0, "air": 0})
-                        if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
-                            btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
-                            self.attack_buttons[r] = btn_rect
+                        for r in [1, 2, 3]:
+                            s = summary.get(r, {"soft": 0, "hard": 0, "air": 0})
+                            if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
+                                btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+                                # musimy zapamiętać, która strefa i jaki zasięg
+                                # np. klucz (zone, r) -> btn_rect
+                                self.attack_buttons[(zone, r)] = btn_rect
 
-                            parts = []
-                            if s["soft"] > 0:
-                                parts.append(f"Soft: {s['soft']}")
-                            if s["hard"] > 0:
-                                parts.append(f"Hard: {s['hard']}")
-                            if s["air"] > 0:
-                                parts.append(f"Air: {s['air']}")
-                            label = f"Zasięg: {r}: " + ", ".join(parts)
+                                parts = []
+                                if s["soft"] > 0:
+                                    parts.append(f"Soft: {s['soft']}")
+                                if s["hard"] > 0:
+                                    parts.append(f"Hard: {s['hard']}")
+                                if s["air"] > 0:
+                                    parts.append(f"Air: {s['air']}")
+                                label = f"Zasięg: {r}: " + ", ".join(parts)
 
-                            draw_button(
-                                self.screen,
-                                btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,
-                                label,
-                                fonts.get_font("StoryScript XXS"),
-                                (200, 50, 50),
-                                WHITE,
-                                hover=False
-                            )
-                            btn_y += btn_height + btn_spacing
+                                draw_button(
+                                    self.screen,
+                                    btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,
+                                    label,
+                                    fonts.get_font("StoryScript XXS"),
+                                    (200, 50, 50),
+                                    WHITE,
+                                    hover=False
+                                )
+                                btn_y += btn_height + btn_spacing
+
             else:
                 empty_surf, _ = fonts.render_text(
                     "pusta",
@@ -785,9 +793,9 @@ class GameView:
             
             # PRZYCISKI ATAKU
             if hasattr(self, 'attack_buttons') and self.attack_buttons:
-                for attack_range, btn_rect in self.attack_buttons.items():
+                for (zone, attack_range), btn_rect in self.attack_buttons.items():
                     if btn_rect.collidepoint(pos):
-                        if self.logic.start_attack_with_range(attack_range):
+                        if self.logic.start_attack_with_range(attack_range, zone):
                             return ("attack_select", None)
                         else:
                             return ("attack_fail", None)
@@ -830,18 +838,15 @@ class GameView:
                     
             # Kliknięcie w panel przeciwnika w trybie ataku
             if self.logic.is_attack_mode():
-                for opponent, rect in self.opponent_rects:
-                    if rect.collidepoint(pos):
-                        attack_zones = self.logic.get_attack_zones()
-                        zones_for_opponent = attack_zones.get(opponent, [])
-                        if zones_for_opponent:
-                            zone = zones_for_opponent[0]  # wybierz pierwszą dostępną strefę
-                            if self.logic.prepare_attack_preview(opponent, zone):
-                                return ("attack_preview", None)
-                            else:
-                                return ("attack_fail", None)
-                            
-            return ("deselect", None)
+                for opponent, zone, zone_rect in self.opponent_zone_rects:
+                    if zone_rect.collidepoint(pos):
+                        if self.logic.prepare_attack_preview(opponent, zone):
+                            return ("attack_preview", None)
+                        else:
+                            return ("attack_fail", None)
+                # jeśli nie kliknięto w żadną strefę, anuluj atak (opcjonalnie)
+                return ("deselect", None)
+                                        
         elif button == 3:
             for view in self.card_views:
                 if view.rect and view.rect.collidepoint(pos):
@@ -917,6 +922,7 @@ class GameView:
             if zone in attack_zones_for_opponent:
                 zone_rect = pygame.Rect(rect.x + 10, rect.y + y_offset, rect.width - 20, line_height - 4)
                 pygame.draw.rect(self.screen, (255, 0, 0), zone_rect, 2)
+                self.opponent_zone_rects.append((opponent, zone, zone_rect))
 
             if cards:
                 card_width = 40
