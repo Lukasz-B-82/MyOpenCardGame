@@ -2,7 +2,7 @@
 import uuid
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 
 # ---------- ENUMY ----------
 class CardType(Enum):
@@ -32,6 +32,13 @@ class Zone(Enum):
     SECOND = "second"
     BACK = "back"
     STATE = "state"
+
+class TargetType(Enum):
+    SOFT = "SOFT"
+    HARD = "HARD"
+    AIR = "AIR"
+
+DiceValue = Union[int, Dict[str, Union[str, int]]]
 
 # ---------- KLASA CARD ----------
 @dataclass
@@ -88,10 +95,10 @@ class Card:
     # Unikalny 32-znakowy identyfikator (UUID bez myślników)
 
     # ---------- WALKA ----------
-    attack: Dict[str, int] = field(default_factory=dict)  # np. {"soft": 2, "hard": 0, "air": 0}
+    attack: Dict[str, DiceValue] = field(default_factory=dict)
     attack_range: int = 0
-    target_type: List[str] = field(default_factory=list)  # np. ["soft"]
-    defense: int = 0
+    target_type: Optional[TargetType] = None
+    defense: DiceValue = 0
     is_ranged_attack: bool = False  # czy atak jest dystansowy (np. artyleria)
     
     # ---------- METODY ----------
@@ -201,7 +208,7 @@ class Card:
             logistics=self.logistics,
             attack=self.attack.copy() if self.attack else {},
             attack_range=self.attack_range,
-            target_type=self.target_type.copy() if self.target_type else [],
+            target_type=self.target_type,
             defense=self.defense,     
             is_ranged_attack=self.is_ranged_attack       
         )
@@ -245,6 +252,7 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
     # ---------- PODSTAWOWE DANE ----------
     type_str = to_str(safe_get(defn, "type", "SOLDIER"))
     faction_str = to_str(safe_get(defn, "faction", "NEUTRAL"))
+    target_type_str = to_str(safe_get(defn, "target_type"))
     
     # ---------- KONWERSJA ENUMÓW (używamy konstruktora z wartością) ----------
     try:
@@ -258,6 +266,14 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
     except ValueError:
         print(f"  Ostrzeżenie: nieznana frakcja '{faction_str}', używam NEUTRAL")
         faction = Faction.NEUTRAL
+
+    target_type_str = to_str(safe_get(defn, "target_type"))
+    target_type = None
+    if target_type_str:
+        try:
+            target_type = TargetType(target_type_str.upper())
+        except ValueError:
+            print(f"  Ostrzeżenie: nieznany target_type '{target_type_str}'")
     
     # ---------- DOZWOLONE STREFY ----------
     allowed_zones = []
@@ -305,18 +321,14 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
     frame_key = safe_get(defn, "frame_key", None)  # pobieramy frame_key
 
     attack_data = safe_get(defn, "attack", {})
-    # Konwersja słownika Lua na słownik Pythona (klucze to stringi)
     attack = {}
     if attack_data:
         for k, v in attack_data.items():
-            attack[str(k)] = int(v) if v is not None else 0
+            attack[str(k)] = parse_dice_value(v)
 
-    target_type_data = safe_get(defn, "target_type", [])
-    target_type = []
-    if target_type_data:
-        for t in lua_table_to_list(target_type_data):
-            target_type.append(str(t))
-    
+    defense = parse_dice_value(safe_get(defn, "defense", 0))
+
+
     # ---------- TWORZENIE KARTY ----------
     return Card(
         name="",
@@ -346,9 +358,41 @@ def create_card_from_lua(defn, name_key: str = None) -> Card:
         attack=attack,
         attack_range=int(safe_get(defn, "attack_range", 0)),
         target_type=target_type,
-        defense=int(safe_get(defn, "defense", 0)),
+        defense=defense,
         is_ranged_attack=bool(safe_get(defn, "is_ranged_attack", False))
     )
+
+def parse_dice_value(value) -> DiceValue:
+    """
+    Konwertuje wartość ataku/obrony z Lua na int lub dict {'dice': str, 'count': int}.
+    Akceptuje:
+    - None → 0
+    - liczba → int
+    - tabela Lua z kluczem 'dice' → dict
+    """
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    # Sprawdź, czy to tabela Lua z kluczem 'dice'
+    try:
+        if hasattr(value, "__getitem__"):
+            dice_key = value["dice"]
+            if dice_key is not None:
+                count = value["count"] if "count" in value else 1
+                return {
+                    "dice": str(dice_key),
+                    "count": int(count) if count is not None else 1,
+                }
+    except (KeyError, TypeError, ValueError):
+        pass
+
+    # Fallback – próbuj jako int
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 # Jeśli potrzebujesz singletonu dla wszystkich kart, możesz dodać:
 ALL_CARDS: List[Card] = []

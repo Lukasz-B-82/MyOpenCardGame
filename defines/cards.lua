@@ -190,6 +190,14 @@ cards["card_11"] = {
     cost_steal = 10,
     allowed_zones = {},
     allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d12[0,1,2,3,4,5,6,7,8,9,10,11]", count = 1 },
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = TargetsTypes.HARD,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 3 },
     image = "11.png",
     frame_key = "04"
 }
@@ -203,6 +211,14 @@ cards["card_12"] = {
     cost_steal = 10,
     allowed_zones = {},
     allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d12[0,1,2,3,4,5,6,7,8,9,10,11]", count = 1 },
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = TargetsTypes.HARD,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 3 },
     image = "12.png",
     frame_key = "04"
 }
@@ -369,13 +385,13 @@ cards["card_24"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "24.png",
     frame_key = "01"
 }
@@ -388,13 +404,13 @@ cards["card_25"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "25.png",
     frame_key = "01"
 }
@@ -407,13 +423,13 @@ cards["card_26"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "26.png",
     frame_key = "01"
 }
@@ -425,6 +441,14 @@ cards["card_27"] = {
     cost_production = 2,
     allowed_zones = {},
     allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
+        [TargetsTypes.HARD] = 0,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "27.png",
     frame_key = "01"
 }
@@ -439,13 +463,13 @@ cards["card_28"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 1,
+        [TargetsTypes.SOFT] = { dice = "d4[0,1,2,3]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
-    attack_range = 0,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    attack_range = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d6[1,2,3,4,5,6]", count = 2 },
     image = "pistol.png",
     frame_key = "01"
 }
@@ -459,13 +483,13 @@ cards["card_29"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 1,
+        [TargetsTypes.SOFT] = { dice = "d4[0,1,2,3]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
-    attack_range = 0,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    attack_range = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d6[1,2,3,4,5,6]", count = 2 },
     image = "29.png",
     frame_key = "01"
 }
@@ -551,13 +575,13 @@ cards["card_35"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "35.png",
     frame_key = "01"
 }
@@ -569,6 +593,14 @@ cards["card_36"] = {
     cost_production = 2,
     allowed_zones = {},
     allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
+        [TargetsTypes.HARD] = 0,
+        [TargetsTypes.AIR] = 0
+    },
+    attack_range = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "36.png",
     frame_key = "01"
 }
@@ -585,13 +617,13 @@ cards["card_37"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
-        [TargetsTypes.HARD] = 3,
+        [TargetsTypes.SOFT] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d12[0,1,2,3,4,5,6,7,8,9,10,11]", count = 1 },
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.HARD },
-    defense = 5,
+    target_type = TargetsTypes.HARD,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 3 },
     image = "37.png",
     frame_key = "01"
 }
@@ -985,20 +1017,20 @@ cards["card_63"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
-        [TargetsTypes.HARD] = 3,
+        [TargetsTypes.SOFT] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d12[0,1,2,3,4,5,6,7,8,9,10,11]", count = 1 },
         [TargetsTypes.AIR] = 0
     },
     attack_range = 1,
-    target_type = { TargetsTypes.HARD },
-    defense = 5,
+    target_type = TargetsTypes.HARD,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 3 },
     image = "63.png",
     frame_key = "02"
 }
 
 -- ==================== 64-70: Samochody ====================
 cards["card_64"] = {
-    name_key = "card_63_name",
+    name_key = "card_64_name",
     type = CardType.CAR,
     faction = Faction.NEUTRAL,
     cost_initiative = 3,
@@ -1104,13 +1136,13 @@ cards["card_71"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 2,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
         [TargetsTypes.HARD] = 0,
         [TargetsTypes.AIR] = 0
     },
-    attack_range = 0,
-    target_type = { TargetsTypes.SOFT },
-    defense = 2,
+    attack_range = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d8[1,2,3,4,5,6,7,8]", count = 2 },
     image = "28.png",
     frame_key = "01"
 }
@@ -1124,15 +1156,15 @@ cards["card_72"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 3,
-        [TargetsTypes.HARD] = 1,
+        [TargetsTypes.SOFT] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d4[0,1,2,3]", count = 1 },
         [TargetsTypes.AIR] = 0
     },
     attack_range = 2,
     is_ranged_attack = true,
     prewent = true,
-    target_type = { TargetsTypes.SOFT },
-    defense = 1,
+    target_type = TargetsTypes.SOFT,
+    defense = { dice = "d6[1,2,3,4,5,6]", count = 1 },
     image = "72.png",
     frame_key = "01"
 }
@@ -1146,14 +1178,88 @@ cards["card_73"] = {
     allowed_zones = {},
     allowed_attachments = {},
     attack = {
-        [TargetsTypes.SOFT] = 4,
-        [TargetsTypes.HARD] = 1,
-        [TargetsTypes.AIR] = 1
+        [TargetsTypes.SOFT] = { dice = "d10[0,1,2,3,4,5,6,7,8,9]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.AIR] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 }
     },
     attack_range = 3,
-    target_type = { TargetsTypes.AIR },
-    defense = 2,
+    target_type = TargetsTypes.AIR,
+    defense = { dice = "d6[1,2,3,4,5,6]", count = 3 },
     image = "73_cas.png",
     frame_key = "02"
 }
+
+cards["card_74"] = {
+    name_key = "card_74_name",
+    type = CardType.BUILDING,
+    faction = Faction.BLUE,
+    cost_initiative = 15,
+    max_workers = 4,
+    fuel_production = 1,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 5 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 5 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "ai-generated.webp",
+    frame_key = "04"
+}
+cards["card_75"] = {
+    name_key = "card_75_name",
+    type = CardType.BUILDING,
+    faction = Faction.BLUE,
+    cost_initiative = 15,
+    max_workers = 4,
+    fuel_production = 1,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 5 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 5 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "ai-generated (1).webp",
+    frame_key = "04"
+}
+cards["card_76"] = {
+    name_key = "card_76_name",
+    type = CardType.BUILDING,
+    faction = Faction.BLUE,
+    cost_initiative = 15,
+    max_workers = 4,
+    fuel_production = 1,
+    requirements = {
+        { zone = Zone.STATE, type = CardType.CITY, count = 1 },
+        { zone = Zone.STATE, type = CardType.TERRAIN, count = 5 },
+        { zone = Zone.STATE, type = CardType.WORKER, count = 5 }
+    },
+    allowed_zones = { Zone.STATE },
+    allowed_attachments = { CardType.WORKER },
+    image = "ai-generated (2).webp",
+    frame_key = "04"
+}
+
+cards["card_77"] = {
+    name_key = "card_77_name",
+    type = CardType.PLANE,
+    faction = Faction.NEUTRAL,
+    cost_initiative = 15,
+    cost_production = 12,
+    cost_steal = 4,
+    allowed_zones = {},
+    allowed_attachments = {},
+    attack = {
+        [TargetsTypes.SOFT] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
+        [TargetsTypes.HARD] = { dice = "d6[0,1,2,3,4,5]", count = 1 },
+        [TargetsTypes.AIR] = { dice = "d12[0,1,2,3,4,5,6,7,8,9,10,11]", count = 1 }
+    },
+    attack_range = 3,
+    target_type = TargetsTypes.AIR,
+    defense = { dice = "d12[1,2,3,4,5,6,7,8,9,10,11,12]", count = 3 },
+    image = "ai_generated.webp",
+    frame_key = "03"
+}
+
 return cards

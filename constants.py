@@ -21,3 +21,4 @@ FONTS_DIR = "fonts"
 FONT_STORY_SCRIPT = os.path.join(FONTS_DIR, "StoryScript-Regular.ttf")
 FONT_BIZUD_GOTHIC_BOLD = os.path.join(FONTS_DIR, "BIZUDGothic-Bold.ttf")
 FONT_BIZUD_GOTHIC = os.path.join(FONTS_DIR, "BIZUDGothic-Regular.ttf")
+FONT_LIBERTINUS_KEYBOARD = os.path.join(FONTS_DIR, "LibertinusKeyboard-Regular.ttf")

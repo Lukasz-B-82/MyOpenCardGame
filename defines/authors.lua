@@ -108,6 +108,17 @@ authors["leonardo.ai"] = {
        '/images/cards/lucid-origin_A_sprawling_industrial_refinery_complex_a_fusion_of_steampunk_cyberpunk_and_goth-0.jpg'
     }
 }
+authors["ecency.com"] = {
+    name = "ecency.com",
+    type = AuthorsType.AI,
+    www = "https://ecency.com/perks/ai-generator",
+    images = {
+        '/images/cards/ai-generated.webp',
+        '/images/cards/ai-generated (2).webp',
+        '/images/cards/ai-generated (1).webp',
+        '/images/cards/ai_generated.webp',
+    }
+}
 authors["chatgpt"] = {
     name = "ChatGPT",
     type = AuthorsType.AI,

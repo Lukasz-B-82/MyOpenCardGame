@@ -41,6 +41,8 @@ class GameLogic:
         self.attack_source_zone: Optional[Zone] = None
 
         self.view = None  # referencja do widoku
+
+        self.selected_defender_index: int = 0  # indeks aktualnie wybranego obrońcy
         
     @property
     def current_player(self) -> Player:
@@ -502,20 +504,15 @@ class GameLogic:
                 defenders.append(card)
         return defenders
 
-    def get_attack_summary(self, zone: Zone) -> Dict[int, Dict[str, int]]:
+    def get_attack_summary(self, zone: Zone) -> Dict[int, Dict[str, float]]:
         """
-        Oblicza skumulowaną sumę ataku dla każdego zasięgu (1, 2, 3)
-        dla danej strefy (FRONT, SECOND, BACK).
-        Dla FRONT: uwzględnia bronie z range >= 1 (czyli wszystkie).
-        Dla SECOND: uwzględnia bronie z range >= 2.
-        Dla BACK: uwzględnia bronie z range >= 3.
+        Oblicza skumulowaną sumę ataku (wartości oczekiwane) dla każdego zasięgu (1, 2, 3).
         """
-        # minimalny zasięg dla strefy
         min_range = {Zone.FRONT: 1, Zone.SECOND: 2, Zone.BACK: 3}.get(zone, 1)
         summary = {
-            1: {"soft": 0, "hard": 0, "air": 0},
-            2: {"soft": 0, "hard": 0, "air": 0},
-            3: {"soft": 0, "hard": 0, "air": 0}
+            1: {"soft": 0.0, "hard": 0.0, "air": 0.0},
+            2: {"soft": 0.0, "hard": 0.0, "air": 0.0},
+            3: {"soft": 0.0, "hard": 0.0, "air": 0.0},
         }
         player = self.current_player
         for card in player.zones.get(zone, []):
@@ -525,11 +522,10 @@ class GameLogic:
                 attack_range = attached.attack_range
                 if attack_range < min_range or attack_range > 3:
                     continue
-                # Dla każdego zasięgu r od min_range do attack_range
                 for r in range(min_range, attack_range + 1):
                     for target_type, value in attached.attack.items():
                         if target_type in summary[r]:
-                            summary[r][target_type] += value
+                            summary[r][target_type] += self._value_to_number(value)
         return summary
 
     def get_attack_zones_for_range(self, attack_range: int, source_zone: Zone) -> Dict[Player, List[Zone]]:
@@ -688,9 +684,24 @@ class GameLogic:
             "target_zone": target_zone,
             "defenders": defenders,
             "attackers": attackers,
-            "source_zone": self.attack_source_zone,  # opcjonalnie
+            "source_zone": self.attack_source_zone,
+            "selected_index": 0,
         }
         return True
+
+    def set_selected_defender(self, index: int):
+        """Ustawia indeks wybranego obrońcy."""
+        if self.attack_preview_data and 0 <= index < len(self.attack_preview_data["defenders"]):
+            self.attack_preview_data["selected_index"] = index
+
+    def get_selected_defender(self) -> Optional[Card]:
+        """Zwraca aktualnie wybranego obrońcę."""
+        if self.attack_preview_data:
+            defenders = self.attack_preview_data["defenders"]
+            idx = self.attack_preview_data.get("selected_index", 0)
+            if 0 <= idx < len(defenders):
+                return defenders[idx]
+        return None
 
     def get_attack_preview_data(self) -> Optional[Dict]:
         return self.attack_preview_data
@@ -711,22 +722,161 @@ class GameLogic:
     def is_attack_preview_mode(self) -> bool:
         return self.attack_preview_data is not None
 
-    def get_defense_type(self, card: Card) -> Optional[str]:
-        """
-        Zwraca typ obrony karty na podstawie jej dołączonych kart (bronie).
-        Zwraca pierwszy target_type z karty, która ma defense > 0.
-        """
+    def get_defense_type(self, card: Card) -> Optional[Tuple[str, float]]:
+        """Zwraca (target_type, obrona_średnia) lub None."""
         for attached in card.attached_cards:
-            if attached.defense > 0 and attached.target_type and len(attached.target_type) > 0:
-                return attached.target_type[0].upper(), attached.defense
+            defense_val = self._value_to_number(attached.defense)
+            if defense_val > 0 and attached.target_type:
+                return attached.target_type.value.upper(), defense_val
         return None
 
-    def get_card_attack(self, card: Card) -> Dict[str, int]:
-
+    def get_card_attack(self, card: Card) -> Dict[str, float]:
+        """
+        Zwraca sumaryczny atak karty (z dołączonych broni), jako wartości liczbowe
+        (wartości oczekiwane z kości). Używane do wyświetlania 'Atak: SOFT(x) ...'.
+        """
+        result: Dict[str, float] = {}
         for attached in card.attached_cards:
-            if attached.attack and len(attached.attack) > 0:
-                return attached.attack
-        return {}
+            if attached.attack:
+                for target_type, value in attached.attack.items():
+                    v = self._value_to_number(value)
+                    if v > 0:
+                        result[target_type] = result.get(target_type, 0.0) + v
+        return result
+
+    def _value_to_number(self, value) -> float:
+        """Zamienia wartość ataku/obrony (int lub dict{dice,count}) na wartość oczekiwaną."""
+        if value is None:
+            return 0.0
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, dict):
+            dice_key = value.get("dice")
+            count = int(value.get("count", 1))
+            if dice_key:
+                from dice import expected_value
+                return expected_value(dice_key, count)
+        return 0.0
+
+    def _dice_value_to_distribution(self, value) -> Dict[int, float]:
+        """Zamienia wartość ataku/obrony (int lub dict{dice,count}) na rozkład."""
+        from dice import dice_distribution, static_distribution
+
+        if value is None:
+            return {0: 1.0}
+        if isinstance(value, (int, float)):
+            return static_distribution(int(value))
+        if isinstance(value, dict):
+            dice_key = value.get("dice")
+            count = int(value.get("count", 1))
+            if dice_key:
+                return dice_distribution(dice_key, count)
+        return {0: 1.0}
+
+    def _attack_distribution_for_card(self, card: Card, target_type: str) -> Dict[int, float]:
+        """Rozkład ataku karty przeciwko danemu typowi celu (z dołączonych broni)."""
+        from dice import combined_distribution
+
+        dists = []
+        for attached in card.attached_cards:
+            val = attached.attack.get(target_type.lower(), 0) if attached.attack else 0
+            dists.append(self._dice_value_to_distribution(val))
+        if not dists:
+            return {0: 1.0}
+        return combined_distribution(dists)
+
+    def _defense_distribution(self, card: Card) -> Dict[int, float]:
+        """Rozkład obrony karty (z dołączonych broni)."""
+        from dice import combined_distribution
+
+        dists = []
+        for attached in card.attached_cards:
+            dists.append(self._dice_value_to_distribution(attached.defense))
+        if not dists:
+            return {0: 1.0}
+        return combined_distribution(dists)
+
+    def calculate_attack_simulation(self, attackers: List[Card], defender: Card) -> Dict:
+        """
+        Symultaniczna runda:
+        - Suma ataków vs suma obrony → czy obrońca ginie
+        - Każdy atakujący niezależnie kontratakowany przez obrońcę
+        """
+        from dice import (
+            combined_distribution, probability_greater, distribution_average
+        )
+
+        # Typ obrońcy
+        defender_type = "SOFT"
+        for attached in defender.attached_cards:
+            if attached.target_type:
+                defender_type = attached.target_type.value.upper()
+                break
+        if defender.target_type:
+            defender_type = defender.target_type.value.upper()
+
+        # Rozkład ataku (suma)
+        attack_dists = []
+        attacker_avgs = []
+        for atk in attackers:
+            dist = self._attack_distribution_for_card(atk, defender_type)
+            attack_dists.append(dist)
+            attacker_avgs.append(distribution_average(dist))
+        attack_dist = combined_distribution(attack_dists)
+
+        # Rozkład obrony
+        defense_dist = self._defense_distribution(defender)
+
+        # P(obrońca ginie)
+        success_chance = probability_greater(attack_dist, defense_dist)
+        attack_avg = distribution_average(attack_dist)
+        defense_avg = distribution_average(defense_dist)
+
+        # Kontrataki — ZAWSZE, dla każdego atakującego
+        counter_attacks = []
+        for atk in attackers:
+            atk_type = "SOFT"
+            for attached in atk.attached_cards:
+                if attached.target_type:
+                    atk_type = attached.target_type.value.upper()
+                    break
+
+            # Atak obrońcy vs obrona atakującego
+            def_attack_dists = []
+            for attached in defender.attached_cards:
+                val = attached.attack.get(atk_type.lower(), 0) if attached.attack else 0
+                dist = self._dice_value_to_distribution(val)
+                def_attack_dists.append(dist)
+            def_attack_dist = (combined_distribution(def_attack_dists)
+                            if def_attack_dists else {0: 1.0})
+
+            atk_defense_dist = self._defense_distribution(atk)
+
+            hit_chance = probability_greater(def_attack_dist, atk_defense_dist)
+            is_ranged = any(a.is_ranged_attack for a in atk.attached_cards)
+            total_hit_chance = 0.0 if is_ranged else hit_chance  # ZAWSZE, bez warunkowania
+
+            atk_name = self.localization.get_card_name(atk.name_key) if atk.name_key else atk.name
+
+            counter_attacks.append({
+                "attacker_name": atk_name,
+                "attacker_type": atk_type,
+                "counter_chance": 1.0,           # kontratak zawsze następuje
+                "hit_chance": hit_chance,         # P(trafienie)
+                "total_hit_chance": total_hit_chance,
+                "is_ranged": is_ranged,
+                "attacker_defense_avg": distribution_average(atk_defense_dist),
+                "counter_attack_avg": distribution_average(def_attack_dist),
+            })
+
+        return {
+            "success_chance": success_chance,
+            "attack_avg": attack_avg,
+            "defense_avg": defense_avg,
+            "attacker_avgs": attacker_avgs,
+            "defender_type": defender_type,
+            "counter_attacks": counter_attacks,
+        }
 
     def load_game_config(self) -> dict:
         try:

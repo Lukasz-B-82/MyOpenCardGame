@@ -5,12 +5,12 @@ local game_start = {
     initial_hand = 7,
     max_initiative = 50,
     food_production = 10,
-    production = 15,
-    steal = 0,
+    production = 25,
+    steal = 20,
     logistics = 12,
     oil_production = 2,
     iron_production = 2,
-    fuel_production = 0,
+    fuel_production = 10,
 }
 
 local discard_card = {

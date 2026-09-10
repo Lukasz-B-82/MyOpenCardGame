@@ -65,6 +65,7 @@ class GameView:
         self.message_padding = 15
 
         self.opponent_zone_rects = []  # lista (opponent, zone, rect)
+        self.defender_rects = []  # lista (card, rect)
 
     def draw_attack_preview(self):
         """Rysuje podgląd ataku jako nakładkę."""
@@ -102,6 +103,8 @@ class GameView:
         # Cele (przeciwnik)
         defenders = data["defenders"]
         attackers = data["attackers"]
+        self.defender_rects.clear()
+        selected_idx = data.get("selected_index", 0)
 
         # Rysuj etykiety
         label_y = preview_y + 70
@@ -120,18 +123,20 @@ class GameView:
             view.update_rect(x, card_y, card_width, card_height)
             view.draw(self.screen, x, card_y, card_width, card_height, language=self.logic.language)
             self.card_views.append(view)
+            self.defender_rects.append((card, view.rect))
 
             # Etykieta obrony (używamy target_type)
-            defense_type, defense_value = self.logic.get_defense_type(card)
-            if defense_type:
-                label = f"{defense_type} [Obrona: {defense_value}]"
+            defense_info = self.logic.get_defense_type(card)
+            if defense_info:
+                defense_type, defense_value = defense_info
+                label = f"{defense_type} [Obrona: {defense_value:.1f}]"
                 draw_text_bg(
                     self.screen, label,
                     fonts.get_font("StoryScript XXS"),
                     (200, 200, 255),
                     x, card_y - 35,
                     padding=8, bg_color=(20,20,20), bg_alpha=150
-                )    
+                )
 
             # Kontratak (atak własny karty)
             card_attack = self.logic.get_card_attack(card)
@@ -139,7 +144,7 @@ class GameView:
             for atype in ["soft", "hard", "air"]:
                 value = card_attack.get(atype, 0)
                 if value > 0:
-                    attack_parts.append(f"{atype.upper()}({value})")
+                    attack_parts.append(f"{atype.upper()}({value:.1f})")
             if attack_parts:
                 label = "Atak: " + ", ".join(attack_parts)
                 draw_text_bg(
@@ -148,7 +153,12 @@ class GameView:
                     (255, 200, 100),
                     x, card_y + card_height + 45,
                     padding=8, bg_color=(20,20,20), bg_alpha=180
-                )        
+                )     
+
+            if i == selected_idx:
+                pygame.draw.rect(self.screen, (255, 0, 0), view.rect, 4)  # gruba czerwona
+            else:
+                pygame.draw.rect(self.screen, (255, 0, 0), view.rect, 1)  # cienka (lub brak)   
 
             if card.attached_cards:
                 attach_offset_x = 25
@@ -177,8 +187,9 @@ class GameView:
             view.draw(self.screen, x, card_y2, card_width, card_height, language=self.logic.language)
             self.card_views.append(view)
 
-            defense_type, defense_value = self.logic.get_defense_type(card)
-            if defense_type:
+            defense_info = self.logic.get_defense_type(card)
+            if defense_info:
+                defense_type, defense_value = defense_info
                 label = f"{defense_type} [Obrona: {defense_value}]"
                 draw_text_bg(
                     self.screen, label,
@@ -186,7 +197,7 @@ class GameView:
                     (200, 200, 255),
                     x, card_y2 - 35,
                     padding=8, bg_color=(20,20,20), bg_alpha=150
-                )              
+                )         
 
             if card.attached_cards:
                 attach_offset_x = 25
@@ -200,6 +211,26 @@ class GameView:
                     attach_view.update_rect(ax, ay, attach_width, attach_height)
                     attach_view.draw(self.screen, ax, ay, attach_width, attach_height, language=self.logic.language)
                     self.card_views.append(attach_view)
+
+        if defenders and attackers:
+            selected_idx = data.get("selected_index", 0)
+            main_defender = defenders[selected_idx] if defenders else None
+            simulation = self.logic.calculate_attack_simulation(attackers, main_defender)
+
+            # Box symulacji – szerokość = oba przyciski + odstęp
+            btn_width = 200
+            btn_height = 50
+            box_width = btn_width * 2 + 10   # 410
+            # Wysokość boxa – dopasuj do liczby linii
+            n_lines = 3 + (1 + len(simulation['counter_attacks']) if simulation['counter_attacks'] else 0)
+            box_height = 25 * n_lines + 30   # przybliżona wysokość
+
+            # Pozycja: prawa krawędź, nad przyciskami
+            box_x = preview_x + preview_width - box_width - 20
+            box_y = preview_y + preview_height - btn_height - 20 - box_height - 15
+
+            self.draw_attack_simulation(simulation, box_x, box_y, box_width, box_height)   
+                       
 
         # Przycisk "Potwierdź"
         btn_width = 200
@@ -316,6 +347,78 @@ class GameView:
             h = min_height + p * available_height
             heights.append(int(h))
         return heights
+
+    def draw_attack_simulation(self, sim, box_x, box_y, box_width, box_height):
+        """Rysuje panel symulacji ataku – box z wyśrodkowanym tekstem."""
+        # Tło boxa
+        draw_alpha_rect(
+            self.screen,
+            box_x, box_y, box_width, box_height,
+            (20, 20, 30), 220,
+            (200, 200, 200), 2
+        )
+
+        # Lista linii: (tekst, kolor, klucz_fontu)
+        lines = []
+
+        # Nagłówek
+        lines.append((f"Symulacja ataku (przeciwko {sim['defender_type']})",
+                    (255, 255, 200), "StoryScript S"))
+
+        # Atak / obrona / szansa
+        avgs = sim.get("attacker_avgs", [])
+        if len(avgs) > 1:
+            attack_str = " + ".join(f"{a:.1f}" for a in avgs) + f" = {sim['attack_avg']:.1f}"
+        else:
+            attack_str = f"{sim['attack_avg']:.1f}"
+
+        lines.append((
+            f"Atak (śr.): {attack_str}    Obrona (śr.): {sim['defense_avg']:.1f}",
+            (255, 255, 255), "StoryScript XS"
+        ))
+
+        color = (100, 255, 100) if sim['success_chance'] > 0.5 else (255, 180, 100)
+        lines.append((
+            f"Szansa powodzenia ataku: {sim['success_chance'] * 100:.1f}%",
+            color, "StoryScript XS"
+        ))
+
+        # Kontrataki
+        if sim['counter_attacks']:
+            lines.append(("Kontrataki:",
+                        (200, 200, 255), "StoryScript XS"))
+
+            for ca in sim['counter_attacks']:
+                name = ca['attacker_name']
+                atype = ca['attacker_type']
+                if ca['is_ranged']:
+                    text = f"{name} ({atype}): brak kontrataku (dystansowy)"
+                    color = (150, 150, 150)
+                else:
+                    hit = ca['hit_chance'] * 100
+                    text = f"{name} ({atype}): trafienie {hit:.1f}%"
+                    color = (255, 255, 255)
+                lines.append((text, color, "StoryScript XXS"))
+
+        # Rysuj linie – wyśrodkowane w poziomie
+        total_height = 0
+        line_heights = []
+        for text, color, font_key in lines:
+            font = fonts.get_font(font_key)
+            h = font.get_height() + 6
+            line_heights.append(h)
+            total_height += h
+
+        y = box_y + (box_height - total_height) // 2
+
+        for i, (text, color, font_key) in enumerate(lines):
+            font = fonts.get_font(font_key)
+            surf, rect = fonts.render_text(
+                text, size_key=font_key, color=color,
+                center=(box_x + box_width // 2, y + line_heights[i] // 2)
+            )
+            self.screen.blit(surf, rect)
+            y += line_heights[i]
 
     def draw_zones(self):
         player = self.logic.current_player
@@ -466,11 +569,11 @@ class GameView:
 
                                 parts = []
                                 if s["soft"] > 0:
-                                    parts.append(f"Soft: {s['soft']}")
+                                    parts.append(f"Soft: {s['soft']:.1f}")
                                 if s["hard"] > 0:
-                                    parts.append(f"Hard: {s['hard']}")
+                                    parts.append(f"Hard: {s['hard']:.1f}")
                                 if s["air"] > 0:
-                                    parts.append(f"Air: {s['air']}")
+                                    parts.append(f"Air: {s['air']:.1f}")
                                 label = f"Zasięg: {r}: " + ", ".join(parts)
 
                                 draw_button(
@@ -765,6 +868,11 @@ class GameView:
                 return "end_turn"
             
             if self.logic.is_attack_preview_mode():
+                for i, (card, rect) in enumerate(self.defender_rects):
+                    if rect.collidepoint(pos):
+                        self.logic.set_selected_defender(i)
+                        return None  #
+                        
                 if self.confirm_button_rect and self.confirm_button_rect.collidepoint(pos):
                     if self.logic.confirm_attack():
                         return ("attack_success", None)

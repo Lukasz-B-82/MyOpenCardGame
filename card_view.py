@@ -5,6 +5,28 @@ from card_renderer import draw_card
 from fonts import fonts
 from localization import Localization
 
+def format_dice_value(value) -> str:
+    """Formatuje wartość ataku/obrony do wyświetlenia w tooltipie."""
+    if value is None:
+        return "0"
+    if isinstance(value, (int, float)):
+        v = int(value)
+        return str(v) if v > 0 else None
+
+    # dict {"dice": ..., "count": ...}
+    try:
+        from dice import expected_value
+        dice_key = value.get("dice", "")
+        count = value.get("count", 1)
+        avg = expected_value(dice_key, count)
+        # Nazwa kości – np. "d6" z "d6[0,1,2,3,4,5]"
+        dice_name = dice_key.split("[")[0].strip() if "[" in dice_key else dice_key
+        if count > 1:
+            return f"{count}×{dice_name} (śr. {avg:.1f})"
+        return f"{dice_name} (śr. {avg:.1f})"
+    except Exception:
+        return "?"
+
 class CardView:
     """
     Klasa odpowiedzialna za wyświetlanie pojedynczej karty, tooltip i podgląd.
@@ -105,14 +127,23 @@ class CardView:
 
         # Atrybuty walki
         if self.card.attack:
-            attack_str = ", ".join([f"{k}:{v}" for k, v in self.card.attack.items() if v > 0])
-            lines.append((f"Atak: {attack_str}", (255, 255, 255)))
+            parts = []
+            for k, v in self.card.attack.items():
+                formatted = format_dice_value(v)
+                if formatted and formatted != "0":
+                    parts.append(f"{k.upper()}: {formatted}")
+            if parts:
+                lines.append((f"Atak: {', '.join(parts)}", (255, 255, 255)))
+
         if self.card.attack_range > 0:
             lines.append((f"Zasięg: {self.card.attack_range}", (255, 255, 255)))
+
         if self.card.target_type:
-            lines.append((f"Cel: {', '.join(self.card.target_type)}", (255, 255, 255)))
-        if self.card.defense > 0:
-            lines.append((f"Obrona: {self.card.defense}", (255, 255, 255)))
+            lines.append((f"Cel: {self.card.target_type.value.upper()}", (255, 255, 255)))
+
+        formatted_def = format_dice_value(self.card.defense)
+        if formatted_def and formatted_def != "0":
+            lines.append((f"Obrona: {formatted_def}", (255, 255, 255)))
         if self.card.is_ranged_attack:
             lines.append((f"Atak dystansowy", (255, 255, 255)))
 

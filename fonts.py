@@ -1,7 +1,7 @@
 # fonts.py
 import pygame
 import os
-from constants import FONT_STORY_SCRIPT, FONT_BIZUD_GOTHIC_BOLD, FONT_BIZUD_GOTHIC
+from constants import FONT_STORY_SCRIPT, FONT_BIZUD_GOTHIC_BOLD, FONT_BIZUD_GOTHIC, FONT_LIBERTINUS_KEYBOARD
 
 class Fonts:
     _instance = None
@@ -40,6 +40,13 @@ class Fonts:
                 "BIZUDGothic M Bold": pygame.font.Font(FONT_BIZUD_GOTHIC_BOLD, 36),
                 "BIZUDGothic L Bold": pygame.font.Font(FONT_BIZUD_GOTHIC_BOLD, 48),
                 "BIZUDGothic XL Bold": pygame.font.Font(FONT_BIZUD_GOTHIC_BOLD, 72),
+
+                "LibertinusKeyboard XS": pygame.font.Font(FONT_LIBERTINUS_KEYBOARD, 18),
+                "LibertinusKeyboard S": pygame.font.Font(FONT_LIBERTINUS_KEYBOARD, 24),
+                "LibertinusKeyboard M": pygame.font.Font(FONT_LIBERTINUS_KEYBOARD, 36),
+                "LibertinusKeyboard L": pygame.font.Font(FONT_LIBERTINUS_KEYBOARD, 48),
+                "LibertinusKeyboard XL": pygame.font.Font(FONT_LIBERTINUS_KEYBOARD, 72),
+
             }
         else:
             print(f"Ostrzeżenie: nie znaleziono fontu {FONT_MAIN}, używam domyślnej.")
