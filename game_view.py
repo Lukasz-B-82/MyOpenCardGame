@@ -1,6 +1,8 @@
 # game_view.py
 import pygame
 import time
+import os
+from typing import Dict, Tuple
 from constants import *
 from card_view import CardView
 from card_renderer import draw_card
@@ -66,6 +68,11 @@ class GameView:
 
         self.opponent_zone_rects = []  # lista (opponent, zone, rect)
         self.defender_rects = []  # lista (card, rect)
+
+        # ---------- KOŚCI (cache + grafiki) ----------
+        self.dice_images: Dict[str, pygame.Surface] = {}
+        self._dice_cache: Dict[Tuple[str, int], pygame.Surface] = {}
+        self.load_dice_images()        
 
     def draw_attack_preview(self):
         """Rysuje podgląd ataku jako nakładkę."""
@@ -317,6 +324,7 @@ class GameView:
         self.draw_initiative_bar()
         self.draw_resources()
         self.draw_attack_preview()
+        self.draw_combat_result() 
         self.draw_tooltip()
         self.draw_preview()
         self.draw_end_turn()
@@ -852,6 +860,257 @@ class GameView:
                 show_attachments=True
             )
 
+    def load_dice_images(self):
+        """Ładuje obrazki ścianek kości z images/dice/."""
+        from dice import DICE_DEFS
+        dice_dir = os.path.join("images", "dice")
+        if not os.path.exists(dice_dir):
+            print(f"Brak katalogu {dice_dir} – brak grafik kości.")
+            return
+        loaded = 0
+        for _, d in DICE_DEFS.items():
+            for _, filename in d["faces"].items():
+                if filename in self.dice_images:
+                    continue
+                path = os.path.join(dice_dir, filename)
+                if os.path.exists(path):
+                    try:
+                        img = pygame.image.load(path).convert_alpha()
+                        self.dice_images[filename] = img
+                        loaded += 1
+                    except Exception as e:
+                        print(f"Nie można wczytać {path}: {e}")
+        print(f"Wczytano {loaded} obrazków kości z {dice_dir}")
+
+    def _get_dice_image(self, filename: str, size: int = 64):
+        """Zwraca przeskalowany obrazek kości (cache)."""
+        key = (filename, size)
+        if key in self._dice_cache:
+            return self._dice_cache[key]
+        img = self.dice_images.get(filename)
+        if img is None:
+            return None
+        scaled = pygame.transform.smoothscale(img, (size, size))
+        self._dice_cache[key] = scaled
+        return scaled
+
+    def _draw_dice_rolls(self, x: int, y: int, rolls, size: int = 64,
+                        spacing: int = 6) -> int:
+        """Rysuje sekwencję kości; rolls = [(dice_key, value), ...]."""
+        from dice import get_faces
+        cur_x = x
+        for dice_key, value in rolls:
+            faces = get_faces(dice_key) or {}
+            filename = faces.get(value)
+            img = self._get_dice_image(filename, size) if filename else None
+            if img is not None:
+                self.screen.blit(img, (cur_x, y))
+            else:
+                # Fallback – prostokąt z wartością
+                pygame.draw.rect(self.screen, (200, 200, 200),
+                                (cur_x, y, size, size), border_radius=8)
+                pygame.draw.rect(self.screen, (40, 40, 40),
+                                (cur_x, y, size, size), 2, border_radius=8)
+                font = pygame.font.Font(None, 32)
+                surf = font.render(str(value), True, (0, 0, 0))
+                self.screen.blit(surf, surf.get_rect(
+                    center=(cur_x + size // 2, y + size // 2)))
+            cur_x += size + spacing
+        return cur_x
+
+    def _draw_section_header(self, text: str, x: int, y: int, color=(255, 255, 255)):
+        """Rysuje nagłówek sekcji z podkreśleniem."""
+        surf, rect = fonts.render_text(text, size_key="StoryScript S",
+                                    color=color, topleft=(x, y))
+        self.screen.blit(surf, rect)
+        underline_y = y + surf.get_height() + 2
+        pygame.draw.line(self.screen, color, (x, underline_y),
+                        (x + surf.get_width(), underline_y), 1)
+
+
+    def draw_combat_result(self):
+        """Rysuje nakładkę z wynikami rzutów – siatka 2×2."""
+        result = self.logic.get_combat_result()
+        if not result:
+            return
+
+        # --- Tło ---
+        overlay = pygame.Surface((self.screen_width, self.screen_height),
+                                pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 215))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w = int(self.screen_width * 0.94)
+        panel_h = int(self.screen_height * 0.94)
+        px = (self.screen_width - panel_w) // 2
+        py = (self.screen_height - panel_h) // 2
+
+        draw_alpha_rect(self.screen, px, py, panel_w, panel_h,
+                        (30, 30, 45), 250, (200, 200, 200), 2)
+
+        # --- Tytuł ---
+        title = (f"Rozstrzygnięcie walki  –  cel: "
+                f"{result['defender_name']} ({result['defender_type']})")
+        t_surf, t_rect = fonts.render_text(
+            title, size_key="StoryScript M", color=(255, 255, 200),
+            center=(self.screen_width // 2, py + 28))
+        self.screen.blit(t_surf, t_rect)
+
+        # --- Obszar siatki 2×2 ---
+        sum_h = 75
+        ok_h = 55
+        grid_top = py + 60
+        grid_bottom = py + panel_h - sum_h - ok_h - 25
+        grid_left = px + 15
+        grid_right = px + panel_w - 15
+
+        grid_w = grid_right - grid_left
+        grid_h = grid_bottom - grid_top
+        mid_x = grid_left + grid_w // 2
+        mid_y = grid_top + grid_h // 2
+
+        # Separatory
+        pygame.draw.line(self.screen, (110, 110, 140),
+                        (mid_x, grid_top), (mid_x, grid_bottom), 2)
+        pygame.draw.line(self.screen, (110, 110, 140),
+                        (grid_left, mid_y), (grid_right, mid_y), 2)
+
+        # Kwadranty – podpisy w narożnikach
+        small = fonts.get_font("StoryScript XXS")
+        qlabels = [
+            ("ATAK", grid_left + 8, grid_top + 8, (255, 200, 100)),
+            ("OBRONA", mid_x + 8, grid_top + 8, (200, 200, 255)),
+            ("KONTRATAK – OBRONA ATAKUJĄCYCH", grid_left + 8, mid_y + 8, (200, 255, 200)),
+            ("KONTRATAK – ATAK OBROŃCY", mid_x + 8, mid_y + 8, (255, 200, 200)),
+        ]
+        for text, lx, ly, col in qlabels:
+            s = small.render(text, True, col)
+            self.screen.blit(s, (lx, ly))
+
+        # --- Wspólne wymiary ---
+        dice_size = 48
+        dice_spacing = 5
+        line_h = 22
+        pad_top = 32          # odstęp od etykiety kwadrantu
+        pad_x = 15            # odstęp od krawędzi kwadrantu
+
+        # ================= TOP-LEFT: Atakujący / Atak =================
+        inner_x = grid_left + pad_x
+        y = grid_top + pad_top
+        for ar in result["attacker_results"]:
+            label = f"{ar['name']}  (suma: {ar['total']})"
+            lsurf, _ = fonts.render_text(label, size_key="StoryScript XS",
+                                        color=WHITE, topleft=(inner_x, y))
+            self.screen.blit(lsurf, (inner_x, y))
+            y += line_h
+            if ar["rolls"]:
+                self._draw_dice_rolls(inner_x, y, ar["rolls"],
+                                    size=dice_size, spacing=dice_spacing)
+                y += dice_size + 8
+            else:
+                y += line_h
+
+        # ================= TOP-RIGHT: Obrońca / Obrona =================
+        inner_x = mid_x + pad_x
+        y = grid_top + pad_top
+        label = f"{result['defender_name']}  (suma: {result['total_defense']})"
+        lsurf, _ = fonts.render_text(label, size_key="StoryScript XS",
+                                    color=WHITE, topleft=(inner_x, y))
+        self.screen.blit(lsurf, (inner_x, y))
+        y += line_h
+        if result["defender_rolls"]:
+            self._draw_dice_rolls(inner_x, y, result["defender_rolls"],
+                                size=dice_size, spacing=dice_spacing)
+            y += dice_size + 8
+
+        # ================= BOTTOM-LEFT: Atakujący / Obrona =================
+        inner_x = grid_left + pad_x
+        y = mid_y + pad_top
+        for ca in result["counter_results"]:
+            if ca["is_ranged"]:
+                text = f"{ca['attacker_name']}: brak (dystansowy)"
+                ls, _ = fonts.render_text(text, size_key="StoryScript XS",
+                                        color=(150, 150, 150), topleft=(inner_x, y))
+                self.screen.blit(ls, (inner_x, y))
+                y += line_h + dice_size + 8
+                continue
+            label = (f"{ca['attacker_name']}  "
+                    f"(obrona: {ca['attacker_defense_total']})")
+            lsurf, _ = fonts.render_text(label, size_key="StoryScript XS",
+                                        color=WHITE, topleft=(inner_x, y))
+            self.screen.blit(lsurf, (inner_x, y))
+            y += line_h
+            if ca["attacker_defense_rolls"]:
+                self._draw_dice_rolls(inner_x, y, ca["attacker_defense_rolls"],
+                                    size=dice_size, spacing=dice_spacing)
+                y += dice_size + 8
+            else:
+                y += line_h
+
+        # ================= BOTTOM-RIGHT: Obrońca / Atak =================
+        inner_x = mid_x + pad_x
+        y = mid_y + pad_top
+        for ca in result["counter_results"]:
+            if ca["is_ranged"]:
+                text = f"{ca['attacker_name']}: brak kontrataku"
+                ls, _ = fonts.render_text(text, size_key="StoryScript XS",
+                                        color=(150, 150, 150), topleft=(inner_x, y))
+                self.screen.blit(ls, (inner_x, y))
+                y += line_h + dice_size + 8
+                continue
+            label = (f"{ca['attacker_name']}  "
+                    f"(atak: {ca['defender_attack_total']})")
+            lsurf, _ = fonts.render_text(label, size_key="StoryScript XS",
+                                        color=WHITE, topleft=(inner_x, y))
+            self.screen.blit(lsurf, (inner_x, y))
+            y += line_h
+            if ca["defender_attack_rolls"]:
+                self._draw_dice_rolls(inner_x, y, ca["defender_attack_rolls"],
+                                    size=dice_size, spacing=dice_spacing)
+                y += dice_size + 8
+            else:
+                y += line_h
+
+        # ================= PODSUMOWANIE (na dole, nad OK) =================
+        sum_y = py + panel_h - sum_h - ok_h - 15
+        draw_alpha_rect(self.screen, px + 20, sum_y, panel_w - 40, sum_h,
+                        (50, 50, 70), 220, (150, 150, 150), 1)
+
+        s1 = (f"Suma ataku: {result['total_attack']}      "
+            f"Suma obrony: {result['total_defense']}")
+        s1surf, _ = fonts.render_text(s1, size_key="StoryScript S",
+                                    color=WHITE,
+                                    center=(self.screen_width // 2, sum_y + 22))
+        self.screen.blit(s1surf, s1surf.get_rect(
+            center=(self.screen_width // 2, sum_y + 22)))
+
+        if result["defender_dies"]:
+            verdict = f"WYNIK: {result['defender_name']} GINIE!"
+            vcolor = (100, 255, 100)
+        else:
+            verdict = f"WYNIK: {result['defender_name']} przeżywa"
+            vcolor = (255, 150, 150)
+        s2surf, _ = fonts.render_text(verdict, size_key="StoryScript S",
+                                    color=vcolor,
+                                    center=(self.screen_width // 2, sum_y + 50))
+        self.screen.blit(s2surf, s2surf.get_rect(
+            center=(self.screen_width // 2, sum_y + 50)))
+
+        # ================= PRZYCISK OK =================
+        btn_w, btn_h = 220, 45
+        btn_x = px + (panel_w - btn_w) // 2
+        btn_y = py + panel_h - btn_h - 12
+        self.confirm_button_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+        draw_button(self.screen, btn_x, btn_y, btn_w, btn_h,
+                    "OK", fonts.get_font("StoryScript M"),
+                    (60, 160, 60), WHITE, hover=False)
+
+        hint = "Kliknij gdziekolwiek, aby zastosować wynik"
+        hs, hr = fonts.render_text(hint, size_key="StoryScript XXS",
+                                color=(200, 200, 200),
+                                center=(self.screen_width // 2, btn_y - 12))
+        self.screen.blit(hs, hr)
+
     # ---------- OBSŁUGA MYSZY ----------
     def handle_mouse_motion(self, pos):
         self.hovered_card_view = None
@@ -864,6 +1123,9 @@ class GameView:
 
     def handle_click(self, pos, button):
         if button == 1:
+            if self.logic.is_combat_result_pending():
+                self.logic.apply_combat_result()
+                return ("combat_applied", None)
             if self.end_turn_button_rect.collidepoint(pos):
                 return "end_turn"
             

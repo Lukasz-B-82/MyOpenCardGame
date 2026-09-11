@@ -282,8 +282,12 @@ class Game:
                             self.logic.deselect_card()
                         elif action[0] == "attack_success":
                             self.view.add_message("Atak udany!", "success")
+                            pass
                         elif action[0] == "attack_fail":
-                            self.view.add_message("Atak nieudany!", "error")
+                            self.view.add_message("Nie udało się rozpocząć ataku!", "error")
+                        elif action[0] == "combat_applied":
+                            # Wynik zastosowany – brak dodatkowej akcji
+                            pass                            
                         elif action[0] == "attack_cancel":
                             self.view.add_message("Anulowano atak", "info")
                         elif action[0] == "attack_select":

@@ -43,6 +43,7 @@ class GameLogic:
         self.view = None  # referencja do widoku
 
         self.selected_defender_index: int = 0  # indeks aktualnie wybranego obrońcy
+        self.combat_result: Optional[Dict] = None
         
     @property
     def current_player(self) -> Player:
@@ -706,14 +707,176 @@ class GameLogic:
     def get_attack_preview_data(self) -> Optional[Dict]:
         return self.attack_preview_data
 
+    # ---------- ROZSTRZYGNIĘCIE WALKI (rzuty) ----------
+    def _roll_value(self, value) -> List[Tuple[str, int]]:
+        """Rzuca kości dla wartości (int/dict) i zwraca listę (dice_key, wynik)."""
+        from dice import roll_each
+        if not isinstance(value, dict):
+            return []
+        dice_key = value.get("dice")
+        if not dice_key:
+            return []
+        count = int(value.get("count", 1))
+        faces = roll_each(dice_key, count)
+        return [(dice_key, v) for v in faces]
+
+    def _roll_combat(self) -> Optional[Dict]:
+        """Wykonuje rzuty kostkami dla aktualnego podglądu ataku."""
+        if not self.attack_preview_data:
+            return None
+
+        attackers = self.attack_preview_data["attackers"]
+        defenders = self.attack_preview_data["defenders"]
+        idx = self.attack_preview_data.get("selected_index", 0)
+        if not defenders or not (0 <= idx < len(defenders)):
+            return None
+        defender = defenders[idx]
+
+        # Typ obrońcy
+        defender_type = "SOFT"
+        for attached in defender.attached_cards:
+            if attached.target_type:
+                defender_type = attached.target_type.value.upper()
+                break
+        if defender.target_type:
+            defender_type = defender.target_type.value.upper()
+
+        # ---- Rzuty atakujących ----
+        attacker_results = []
+        for atk in attackers:
+            rolls: List[Tuple[str, int]] = []
+            for attached in atk.attached_cards:
+                val = attached.attack.get(defender_type.lower(), 0) if attached.attack else 0
+                rolls.extend(self._roll_value(val))
+            total = sum(v for _, v in rolls)
+            atk_name = (self.localization.get_card_name(atk.name_key)
+                        if atk.name_key else atk.name) or "?"
+            attacker_results.append({
+                "card": atk, "name": atk_name,
+                "rolls": rolls, "total": total,
+            })
+        total_attack = sum(r["total"] for r in attacker_results)
+
+        # ---- Obrona obrońcy ----
+        defender_rolls: List[Tuple[str, int]] = []
+        for attached in defender.attached_cards:
+            defender_rolls.extend(self._roll_value(attached.defense))
+        total_defense = sum(v for _, v in defender_rolls)
+
+        defender_name = (self.localization.get_card_name(defender.name_key)
+                        if defender.name_key else defender.name) or "?"
+        defender_dies = total_attack > total_defense
+
+        # ---- Kontrataki (obrońca atakuje każdego atakującego) ----
+        counter_results = []
+        for atk in attackers:
+            atk_type = "SOFT"
+            for attached in atk.attached_cards:
+                if attached.target_type:
+                    atk_type = attached.target_type.value.upper()
+                    break
+
+            # Atak obrońcy vs obrona atakującego
+            def_atk_rolls: List[Tuple[str, int]] = []
+            for attached in defender.attached_cards:
+                val = attached.attack.get(atk_type.lower(), 0) if attached.attack else 0
+                def_atk_rolls.extend(self._roll_value(val))
+            def_atk_total = sum(v for _, v in def_atk_rolls)
+
+            # Obrona atakującego
+            atk_def_rolls: List[Tuple[str, int]] = []
+            for attached in atk.attached_cards:
+                atk_def_rolls.extend(self._roll_value(attached.defense))
+            atk_def_total = sum(v for _, v in atk_def_rolls)
+
+            is_ranged = any(a.is_ranged_attack for a in atk.attached_cards)
+            hit = (not is_ranged) and (def_atk_total > atk_def_total)
+
+            atk_name = (self.localization.get_card_name(atk.name_key)
+                        if atk.name_key else atk.name) or "?"
+            counter_results.append({
+                "attacker": atk,
+                "attacker_name": atk_name,
+                "defender_attack_rolls": def_atk_rolls,
+                "defender_attack_total": def_atk_total,
+                "attacker_defense_rolls": atk_def_rolls,
+                "attacker_defense_total": atk_def_total,
+                "hit": hit,
+                "is_ranged": is_ranged,
+            })
+
+        return {
+            "attacker_results": attacker_results,
+            "total_attack": total_attack,
+            "defender": defender,
+            "defender_name": defender_name,
+            "defender_rolls": defender_rolls,
+            "total_defense": total_defense,
+            "defender_dies": defender_dies,
+            "counter_results": counter_results,
+            "defender_type": defender_type,
+            "target_player": self.attack_preview_data["target_player"],
+            "target_zone": self.attack_preview_data["target_zone"],
+        }
+
     def confirm_attack(self) -> bool:
-        """Potwierdza atak – wykonuje go na podstawie danych podglądu."""
+        """Potwierdza atak – wykonuje rzuty i czeka na kliknięcie, by zastosować."""
         if not self.attack_preview_data:
             return False
-        target_player = self.attack_preview_data["target_player"]
-        target_zone = self.attack_preview_data["target_zone"]
-        self.attack_preview_data = None
-        return self.perform_attack_on_zone(target_player, target_zone)
+        result = self._roll_combat()
+        if result is None:
+            return False
+        self.combat_result = result
+        return True
+
+    def get_combat_result(self) -> Optional[Dict]:
+        return self.combat_result
+
+    def is_combat_result_pending(self) -> bool:
+        return self.combat_result is not None
+
+    def apply_combat_result(self) -> bool:
+        """Zastosowuje wynik walki (wywoływane po zamknięciu ekranu rzutów)."""
+        if not self.combat_result:
+            return False
+        result = self.combat_result
+        self.combat_result = None
+
+        target_player = result["target_player"]
+        defender = result["defender"]
+
+        # 1) Kontrataki – giną atakujący trafieni
+        for ca in result["counter_results"]:
+            if not ca["hit"]:
+                continue
+            atk = ca["attacker"]
+            for z in (Zone.FRONT, Zone.SECOND, Zone.BACK):
+                if atk in self.current_player.zones.get(z, []):
+                    self.current_player.zones[z].remove(atk)
+                    break
+            self.add_message(f"{ca['attacker_name']} zginął od kontrataku!", "error")
+
+        # 2) Wynik ataku na obrońcę
+        if result["defender_dies"]:
+            if defender.card_type == CardType.TERRAIN:
+                if defender in target_player.zones.get(Zone.STATE, []):
+                    target_player.zones[Zone.STATE].remove(defender)
+                self.current_player.zones[Zone.STATE].append(defender)
+                self.add_message(f"Zdobyto teren: {result['defender_name']}!", "success")
+            else:
+                for z in (Zone.FRONT, Zone.SECOND, Zone.BACK):
+                    if defender in target_player.zones.get(z, []):
+                        target_player.zones[z].remove(defender)
+                        break
+                self.add_message(f"Zabito {result['defender_name']}!", "success")
+        else:
+            self.add_message(
+                f"Atak nieudany – {result['defender_name']} przetrwał!", "error"
+            )
+
+        self.cancel_attack()
+        self.cancel_attack_preview()
+        return True
 
     def cancel_attack_preview(self):
         """Anuluje podgląd ataku."""
