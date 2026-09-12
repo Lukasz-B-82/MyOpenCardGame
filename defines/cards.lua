@@ -1182,6 +1182,7 @@ cards["card_73"] = {
         [TargetsTypes.HARD] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 },
         [TargetsTypes.AIR] = { dice = "d8[0,1,2,3,4,5,6,7]", count = 1 }
     },
+    fuel_consumption = 3,
     attack_range = 3,
     target_type = TargetsTypes.AIR,
     defense = { dice = "d6[1,2,3,4,5,6]", count = 3 },
@@ -1248,6 +1249,7 @@ cards["card_77"] = {
     cost_initiative = 15,
     cost_production = 12,
     cost_steal = 4,
+    fuel_consumption = 3,
     allowed_zones = {},
     allowed_attachments = {},
     attack = {

@@ -168,6 +168,9 @@ class GameLogic:
             if not (attached_card.card_type == CardType.WORKER and target_card.food_production > 0):
                 return False
 
+        if attached_card.fuel_consumption > 0 and player.fuel_production < attached_card.fuel_consumption:
+            return False
+            
         if attached_card.cost_initiative > player.initiative:
             return False
 

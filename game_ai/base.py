@@ -91,7 +91,14 @@ class BaseAI(ABC):
         for card in list(p.hand):
             if not card.allowed_zones:
                 continue
-            if card.cost_initiative > p.initiative:      # <-- NOWE
+            if card.cost_initiative > p.initiative:
+                continue
+            # nowe: koszty zasobowe – dokładnie te same warunki co w play_card_to_zone
+            if card.food_consumption > p.food_production:
+                continue
+            if card.fuel_consumption > p.fuel_production:
+                continue
+            if card.cost_production > 0 and p.production < card.cost_production:
                 continue
             if not logic.check_requirements(card, p):
                 continue
