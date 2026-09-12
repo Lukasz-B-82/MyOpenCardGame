@@ -337,11 +337,25 @@ class Game:
 
     def run(self):
         while self.running:
-            self.handle_events()
+            # Sprawdź zwycięstwo co klatkę (tanie – O(liczba kart))
+            self.logic.check_victory()
 
+            if self.logic.victor:
+                # Tryb "game over" – rysujemy, ale nie przetwarzamy kliknięć
+                self.draw()
+                pygame.display.flip()
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    elif (event.type == pygame.KEYDOWN
+                          and event.key == pygame.K_ESCAPE):
+                        self.running = False
+                self.clock.tick(FPS)
+                continue
+
+            self.handle_events()
             if self.running:
                 self._maybe_run_ai_turn()
-
             self.draw()
             pygame.display.flip()
             self.clock.tick(FPS)

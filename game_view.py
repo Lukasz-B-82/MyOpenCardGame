@@ -329,6 +329,7 @@ class GameView:
         self.draw_preview()
         self.draw_end_turn()
         self.draw_messages()
+        self.draw_victory()
 
     def calculate_zone_heights(self, counts):
         total_cards = sum(counts)
@@ -616,6 +617,35 @@ class GameView:
         info = f"Tura {self.logic.turn} | Gracz: {self.logic.current_player.name}"
         surf, rect = fonts.render_text(info, size_key="StoryScript L", color=WHITE, center=(self.screen_width//2, info_height//2))
         self.screen.blit(surf, rect)
+
+        # --- przewaga graczy po prawej ---
+        strengths = self.logic.get_all_strengths()
+        total = sum(strengths.values()) or 1
+        min_turns = int(self.logic.game_config.get("min_turns", 10))
+        max_turns = int(self.logic.game_config.get("max_turns", 50))
+        victory_active = self.logic.turn >= min_turns
+
+        sx = self.screen_width - 240
+        sy = 15
+        for p in self.logic.players:
+            pct = strengths.get(p, 0) / total * 100
+            color = (100, 255, 100) if victory_active and pct >= 75 else (210, 210, 210)
+            text = f"{p.name}: {pct:.0f}%"
+            s_surf, _ = fonts.render_text(
+                text, size_key="StoryScript XS", color=color,
+                topleft=(sx, sy),
+            )
+            self.screen.blit(s_surf, (sx, sy))
+            sy += 22
+
+        # Linia z info o limitach
+        info = f"Zwycięstwo: od tury {min_turns}, koniec w turze {max_turns}"
+        col = (180, 180, 180) if victory_active else (150, 100, 100)
+        i_surf, _ = fonts.render_text(
+            info, size_key="StoryScript XXS", color=col,
+            topleft=(sx, sy + 4),
+        )
+        self.screen.blit(i_surf, (sx, sy + 4))
 
     def draw_deck(self):
         player = self.logic.current_player
@@ -927,6 +957,55 @@ class GameView:
         pygame.draw.line(self.screen, color, (x, underline_y),
                         (x + surf.get_width(), underline_y), 1)
 
+    def draw_victory(self):
+        """Rysuje nakładkę zwycięstwa, jeśli logic.victor jest ustawione."""
+        victor = self.logic.victor
+        if not victor:
+            return
+
+        overlay = pygame.Surface((self.screen_width, self.screen_height),
+                                 pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 215))
+        self.screen.blit(overlay, (0, 0))
+
+        # Panel
+        panel_w, panel_h = 700, 260
+        px = (self.screen_width - panel_w) // 2
+        py = (self.screen_height - panel_h) // 2
+        draw_alpha_rect(self.screen, px, py, panel_w, panel_h,
+                        (40, 40, 70), 250, (255, 220, 100), 3)
+
+        # Tytuł
+        title = f"ZWYCIĘSTWO: {victor.name}"
+        t_surf, t_rect = fonts.render_text(
+            title, size_key="StoryScript XL", color=(255, 220, 100),
+            center=(self.screen_width // 2, py + 70),
+        )
+        self.screen.blit(t_surf, t_rect)
+
+        # Podsumowanie przewagi
+        strengths = self.logic.get_all_strengths()
+        total = sum(strengths.values()) or 1
+        lines = []
+        for p in self.logic.players:
+            pct = strengths.get(p, 0) / total * 100
+            lines.append(f"{p.name}: {strengths.get(p, 0)} pkt ({pct:.1f}%)")
+        y = py + 140
+        for line in lines:
+            s_surf, s_rect = fonts.render_text(
+                line, size_key="StoryScript M", color=WHITE,
+                center=(self.screen_width // 2, y),
+            )
+            self.screen.blit(s_surf, s_rect)
+            y += 34
+
+        # Podpowiedź
+        hint = "Naciśnij ESC, aby wyjść"
+        h_surf, h_rect = fonts.render_text(
+            hint, size_key="StoryScript S", color=(180, 180, 180),
+            center=(self.screen_width // 2, py + panel_h - 30),
+        )
+        self.screen.blit(h_surf, h_rect)
 
     def draw_combat_result(self):
         """Rysuje nakładkę z wynikami rzutów – siatka 2×2."""

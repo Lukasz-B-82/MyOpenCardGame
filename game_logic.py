@@ -48,6 +48,10 @@ class GameLogic:
         # --- koszt ataku w bieżącej turze ---
         self.attack_count_this_turn: int = 0     # ile ataków już wykonano
         self.current_attack_cost: int = 0        # koszt zaplanowanego ataku (do pobrania)        
+
+        # --- zwycięstwo ---
+        self.victor: Optional[Player] = None
+
         
     @property
     def current_player(self) -> Player:
@@ -1134,9 +1138,8 @@ class GameLogic:
     def load_game_config(self) -> dict:
         """Wczytuje defines/game.lua.
 
-        Plik zwraca trzy tabele: game_start, atack, discard_card.
-        Spłaszczamy game_start na top level (żeby Player znalazł np. "initiative"),
-        a atack i discard_card zostawiamy pod własnymi kluczami.
+        Plik zwraca kolejno:
+            game_start, atack, discard_card, card_value, victory, min_turns, max_turns
         """
         try:
             import lupa
@@ -1145,19 +1148,64 @@ class GameLogic:
             with open("defines/game.lua", "r", encoding="utf-8") as f:
                 result = lua.execute(f.read())
 
-            # Lua zwraca krotkę: (game_start, atack, discard_card)
-            if isinstance(result, tuple):
-                game_start, atack, discard_card = (list(result) + [{}, {}, {}])[:3]
-            else:
-                # fallback – gdyby ktoś zmienił plik na zwracający jedną tabelę
-                game_start, atack, discard_card = result or {}, {}, {}
+            values = list(result) if isinstance(result, tuple) else [result]
+            # dopełnij do 7 pustymi wartościami
+            while len(values) < 7:
+                values.append({})
+            game_start, atack, discard_card, card_value, victory, min_turns, max_turns = values[:7]
 
             flat = {}
             for k, v in dict(game_start or {}).items():
                 flat[str(k)] = v
             flat["atack"] = dict(atack or {})
             flat["discard_card"] = dict(discard_card or {})
+            flat["card_value"] = dict(card_value or {})
+            flat["victory"] = dict(victory or {})
+            flat["min_turns"] = int(min_turns) if not isinstance(min_turns, dict) else 10
+            flat["max_turns"] = int(max_turns) if not isinstance(max_turns, dict) else 50
             return flat
+
+        except Exception as e:
+            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
+            import traceback
+            traceback.print_exc()
+            return {
+                "atack": {
+                    "base_cost": 10, "cost_per_unit": 3,
+                    "next_attack_cost_decrease": 5, "min_initiative_cost": 5,
+                },
+                "discard_card": {"initiative_cost": 1},
+                "card_value": {
+                    "TERRAIN": 1, "WORKER": 1, "SOLDIER": 2,
+                    "WEAPON": 3, "BUILDING": 3, "CITY": 3,
+                    "TANK": 5, "PLANE": 5, "ARTILLERY": 5,
+                    "VEHICLE": 3, "CAR": 2,
+                },
+                "victory": {"advantage_threshold": 0.75},
+                "min_turns": 10,
+                "max_turns": 50,
+            }
+
+        except Exception as e:
+            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
+            import traceback
+            traceback.print_exc()
+            return {
+                "atack": {
+                    "base_cost": 10,
+                    "cost_per_unit": 3,
+                    "next_attack_cost_decrease": 5,
+                    "min_initiative_cost": 5,
+                },
+                "discard_card": {"initiative_cost": 1},
+                "card_value": {
+                    "TERRAIN": 1, "WORKER": 1, "SOLDIER": 2,
+                    "WEAPON": 3, "BUILDING": 3, "CITY": 3,
+                    "TANK": 5, "PLANE": 5, "ARTILLERY": 5,
+                    "VEHICLE": 3, "CAR": 2,
+                },
+                "victory": {"advantage_threshold": 0.75},
+            }
 
         except Exception as e:
             print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
@@ -1175,3 +1223,86 @@ class GameLogic:
 
     def set_view(self, view):
         self.view = view
+
+    # ---------- WARTOŚĆ KART I PRZEWAGA ----------
+    # Domyślne wagi – używane gdy typ nie ma wpisu w Lua
+    _CARD_VALUE_DEFAULTS = {
+        "TERRAIN": 1, "WORKER": 1,
+        "SOLDIER": 2, "CAR": 2,
+        "WEAPON": 3, "BUILDING": 3, "CITY": 3, "VEHICLE": 3,
+        "TANK": 5, "PLANE": 5, "ARTILLERY": 5,
+    }
+
+    def get_card_value(self, card: Card) -> int:
+        """Wartość pojedynczej karty (na podstawie typu)."""
+        cfg = self.game_config.get("card_value", {}) or {}
+        key = card.card_type.value
+        if key in cfg:
+            return int(cfg[key])
+        return int(self._CARD_VALUE_DEFAULTS.get(key, 1))
+
+    def get_player_strength(self, player: Player) -> int:
+        """Suma wartości wszystkich kart gracza na planszy (w strefach) + załączniki."""
+        total = 0
+        for zone_cards in player.zones.values():
+            for card in zone_cards:
+                total += self.get_card_value(card)
+                for att in card.attached_cards:
+                    total += self.get_card_value(att)
+        return total
+
+    def get_all_strengths(self) -> Dict[Player, int]:
+        """Słownik {Player: suma_wartości}."""
+        return {p: self.get_player_strength(p) for p in self.players}
+
+    def check_victory(self) -> Optional[Player]:
+        """Sprawdza warunki zwycięstwa.
+
+        1) Przed `min_turns` – zwycięstwo nie jest sprawdzane.
+        2) Po `max_turns` – koniec gry: wygrywa gracz z największą liczbą punktów.
+        3) W międzyczasie – zwycięstwo przez przewagę > threshold.
+        """
+        if self.victor:
+            return self.victor
+
+        min_turns = int(self.game_config.get("min_turns", 10))
+        max_turns = int(self.game_config.get("max_turns", 50))
+
+        # 2) Twardy limit tur
+        if self.turn >= max_turns:
+            strengths = self.get_all_strengths()
+            if strengths:
+                best = max(strengths, key=lambda p: strengths[p])
+                self.victor = best
+                self.add_message(
+                    f"Koniec gry (tura {self.turn}). "
+                    f"Zwycięstwo: {best.name} ({strengths[best]} pkt)",
+                    "success",
+                )
+                return self.victor
+            return None
+
+        # 1) Za wcześnie
+        if self.turn < min_turns:
+            return None
+
+        # 3) Zwycięstwo przez przewagę
+        strengths = self.get_all_strengths()
+        total = sum(strengths.values())
+        if total <= 0:
+            return None
+        threshold = float(
+            (self.game_config.get("victory", {}) or {}).get(
+                "advantage_threshold", 0.75
+            )
+        )
+        for p, s in strengths.items():
+            share = s / total
+            if share > threshold:
+                self.victor = p
+                self.add_message(
+                    f"ZWYCIĘSTWO: {p.name}! Przewaga {share*100:.1f}%",
+                    "success",
+                )
+                return p
+        return None
