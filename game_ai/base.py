@@ -156,9 +156,10 @@ class BaseAI(ABC):
         logic = self.logic
 
         if kind == "play":
-            _, card, zone = action
+            _, card, target_zone = action
             logic.select_card(card)
-            logic.play_card_to_zone(zone)
+            if not logic.play_card_to_zone(target_zone):
+                print(f"[AI] play_card_to_zone NIE powiodło się: {self.action_to_str(action)}")
 
         elif kind == "attach":
             _, card, target = action

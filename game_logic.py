@@ -583,7 +583,7 @@ class GameLogic:
             if not available_zones:
                 # jeśli brak żołnierzy, sprawdź tereny w STATE
                 for card in target_player.zones.get(Zone.STATE, []):
-                    if card.card_type == CardType.TERRAIN:
+                    if card.card_type == CardType.TERRAIN or card.card_type == CardType.BUILDING or card.card_type == CardType.CITY:
                         available_zones.append(Zone.STATE)
                         break
             # wybierz pierwsze max_targets stref
@@ -658,7 +658,7 @@ class GameLogic:
         defenders = []
         if zone == Zone.STATE:
             for card in target_player.zones.get(Zone.STATE, []):
-                if card.card_type == CardType.TERRAIN:
+                if card.card_type in (CardType.TERRAIN, CardType.CITY, CardType.BUILDING):
                     defenders.append(card)
         else:
             for card in target_player.zones.get(zone, []):
@@ -702,7 +702,7 @@ class GameLogic:
         defenders = []
         if target_zone == Zone.STATE:
             for card in target_player.zones.get(Zone.STATE, []):
-                if card.card_type == CardType.TERRAIN:
+                if card.card_type in (CardType.TERRAIN, CardType.CITY, CardType.BUILDING):
                     defenders.append(card)
         else:
             for card in target_player.zones.get(target_zone, []):
@@ -874,12 +874,24 @@ class GameLogic:
     def is_combat_result_pending(self) -> bool:
         return self.combat_result is not None
 
+    def _remove_defender_from_owner(self, defender: Card, owner: Player) -> Optional[Zone]:
+        """Usuwa obrońcę ze wszystkich stref właściciela. Zwraca strefę lub None."""
+        for z in (Zone.FRONT, Zone.SECOND, Zone.BACK, Zone.STATE):
+            zone_list = owner.zones.get(z, [])
+            if defender in zone_list:
+                zone_list.remove(defender)
+                return z
+        return None
+
     def apply_combat_result(self) -> bool:
         """Zastosowuje wynik walki (wywoływane po zamknięciu ekranu rzutów)."""
         if not self.combat_result:
             return False
         result = self.combat_result
         self.combat_result = None
+
+        attack_cost = self.current_attack_cost
+        print(f"[DEBUG apply] attack_cost={attack_cost}")
 
         target_player = result["target_player"]
         defender = result["defender"]
@@ -889,7 +901,7 @@ class GameLogic:
             if not ca["hit"]:
                 continue
             atk = ca["attacker"]
-            for z in (Zone.FRONT, Zone.SECOND, Zone.BACK):
+            for z in (Zone.FRONT, Zone.SECOND, Zone.BACK, Zone.STATE):
                 if atk in self.current_player.zones.get(z, []):
                     self.current_player.zones[z].remove(atk)
                     break
@@ -897,16 +909,35 @@ class GameLogic:
 
         # 2) Wynik ataku na obrońcę
         if result["defender_dies"]:
-            if defender.card_type == CardType.TERRAIN:
-                if defender in target_player.zones.get(Zone.STATE, []):
-                    target_player.zones[Zone.STATE].remove(defender)
+            # Karty dołączone do obrońcy → discard właściciela (zawsze)
+            attached_cards = list(defender.attached_cards)
+            defender.attached_cards.clear()
+
+            if defender.card_type in (CardType.TERRAIN, CardType.CITY):
+                # --- PRZEJĘCIE: teren / miasto idzie do atakującego (bez załączników) ---
+                self._remove_defender_from_owner(defender, target_player)
+                for att in attached_cards:
+                    target_player.discard.append(att)
                 self.current_player.zones[Zone.STATE].append(defender)
-                self.add_message(f"Zdobyto teren: {result['defender_name']}!", "success")
+                self.add_message(
+                    f"Zdobyto: {result['defender_name']}!", "success"
+                )
+
+            elif defender.card_type == CardType.BUILDING:
+                # --- ZNISZCZENIE: budynek i jego załączniki do discardu właściciela ---
+                self._remove_defender_from_owner(defender, target_player)
+                for att in attached_cards:
+                    target_player.discard.append(att)
+                target_player.discard.append(defender)
+                self.add_message(
+                    f"Zniszczono budynek: {result['defender_name']}!", "success"
+                )
+
             else:
-                for z in (Zone.FRONT, Zone.SECOND, Zone.BACK):
-                    if defender in target_player.zones.get(z, []):
-                        target_player.zones[z].remove(defender)
-                        break
+                # --- ŻOŁNIERZ: znika z gry, jego ekwipunek do discardu ---
+                self._remove_defender_from_owner(defender, target_player)
+                for att in attached_cards:
+                    target_player.discard.append(att)
                 self.add_message(f"Zabito {result['defender_name']}!", "success")
         else:
             self.add_message(
@@ -917,18 +948,22 @@ class GameLogic:
         self.cancel_attack_preview()
 
         # --- pobierz koszt inicjatywy za atak ---
-        if self.current_attack_cost > 0:
-            self.current_player.initiative -= self.current_attack_cost
+        if attack_cost > 0:
+            self.current_player.initiative -= attack_cost
             self.attack_count_this_turn += 1
             self.add_message(
-                f"Zapłacono {self.current_attack_cost} inicjatywy za atak "
+                f"Zapłacono {attack_cost} inicjatywy za atak "
                 f"(ataków w turze: {self.attack_count_this_turn})",
                 "info",
             )
             self.current_attack_cost = 0
 
-        self.cancel_attack()
-        self.cancel_attack_preview()
+        # 5) Przelicz bilanse po zmianach własności kart
+        self.update_player_food_production(target_player)
+        self.update_player_food_production(self.current_player)
+        # produkcja/iron/steel też mogą się zmienić – przeliczamy
+        target_player.production = self.calculate_production_balance(target_player)
+        self.current_player.production = self.calculate_production_balance(self.current_player)
 
         return True
 
