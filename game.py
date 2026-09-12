@@ -3,6 +3,7 @@ import pygame
 import sys
 import os
 import random
+
 from typing import List, Optional
 from PIL import Image
 from constants import *
@@ -15,7 +16,8 @@ from deck_editor import ALL_CARDS
 from game_logic import GameLogic
 from card_view import CardView
 from game_view import GameView
-
+from game_ai.registry import create_ai
+from game_ai import heuristic_ai
 
 class Game:
     def __init__(self, screen, clock, players_config, language="pl"):
@@ -40,6 +42,9 @@ class Game:
         )
         print("set_view")
         self.logic.set_view(self.view)
+
+        # Podłącz AI do graczy oznaczonych jako AI
+        self._setup_ai(players_config)
                 
         # Lista wszystkich widocznych kart (do tooltipów i podglądu)
         self.card_views = []  # wszystkie CardView w grze (ręka + strefy)
@@ -50,6 +55,26 @@ class Game:
         self.preview_height = 768
         
         self.zone_rects = {}
+
+    def _setup_ai(self, players_config):
+        """Tworzy instancje AI dla graczy oznaczonych jako AI.
+
+        Zakładamy, że kolejność w players_config odpowiada kolejności w logic.players
+        (obie listy są budowane w tej samej kolejności).
+        """
+        for cfg, player in zip(players_config, self.logic.players):
+            ptype = cfg.get("type", "human")
+            player.observe = bool(cfg.get("observe", True))
+            player.ai = None
+            if ptype == "human":
+                continue
+            try:
+                player.ai = create_ai(ptype, self.logic)
+                print(f"[Game] {player.name}: AI='{ptype}', observe={player.observe}")
+            except Exception as e:
+                print(f"[Game] Nie można utworzyć AI '{ptype}' "
+                      f"dla {player.name}: {e}")
+                player.ai = None
 
     def create_deck(self, deck_name: str) -> List[Card]:
         import json
@@ -313,9 +338,72 @@ class Game:
     def run(self):
         while self.running:
             self.handle_events()
+
+            if self.running:
+                self._maybe_run_ai_turn()
+
             self.draw()
             pygame.display.flip()
             self.clock.tick(FPS)
+
+    # ---------- AI ----------
+    def _maybe_run_ai_turn(self):
+        """Jeśli obecny gracz to AI, wykonaj jego turę."""
+        p = self.current_player
+        if getattr(p, "ai", None) is None:
+            return  # człowiek – nic nie robimy
+
+        # Bezpieczeństwo: posprzątaj ewentualne niedokończone stany
+        if self.logic.is_combat_result_pending():
+            self.logic.apply_combat_result()
+        if self.logic.is_attack_preview_mode():
+            self.logic.cancel_attack_preview()
+
+        self._run_ai_turn()
+
+    def _run_ai_turn(self):
+        """Wykonuje turę AI. W trybie observe rysuje klatki i pauzuje."""
+        p = self.current_player
+        ai = p.ai
+        observe = getattr(p, "observe", True)
+
+        self.view.add_message(f"Tura: {p.name} (AI {ai.name})", "info")
+
+        def pump_events():
+            """Opróżnia kolejkę eventów – pilnuje tylko QUIT/ESC."""
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif (event.type == pygame.KEYDOWN
+                      and event.key == pygame.K_ESCAPE):
+                    self.running = False
+
+        def on_action(action):
+            pump_events()
+            if not self.running:
+                return
+            if observe:
+                label = ai.action_to_str(action)
+                self.view.add_message(f"{p.name}: {label}", "info")
+                self.draw()
+                pygame.display.flip()
+                pygame.time.wait(350)
+
+        # Krótka pauza przed startem tury AI (nawet w trybie hidden)
+        if not observe:
+            self.draw()
+            pygame.display.flip()
+            pygame.time.wait(150)
+
+        ai.take_turn(max_actions=30, on_action=on_action)
+
+        # Dokończ konsumpcję eventów z czasu tury AI
+        pump_events()
+        if not self.running:
+            return
+
+        # Przejdź do następnego gracza
+        self.logic.next_turn()
 
 def game_loop(screen, clock, players_config, language="pl"):
     game = Game(screen, clock, players_config, language)

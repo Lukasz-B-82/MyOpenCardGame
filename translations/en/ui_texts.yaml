@@ -30,6 +30,8 @@ deck_list: "Deck"
 all_cards: "Cards"
 save_as: "Save as"
 delete_deck: "Delete deck"
+observe: "Observe"
+hide: "Hide"
 
 
 card_type_SOLDIER: "Soldier"

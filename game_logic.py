@@ -44,6 +44,10 @@ class GameLogic:
 
         self.selected_defender_index: int = 0  # indeks aktualnie wybranego obrońcy
         self.combat_result: Optional[Dict] = None
+
+        # --- koszt ataku w bieżącej turze ---
+        self.attack_count_this_turn: int = 0     # ile ataków już wykonano
+        self.current_attack_cost: int = 0        # koszt zaplanowanego ataku (do pobrania)        
         
     @property
     def current_player(self) -> Player:
@@ -133,6 +137,23 @@ class GameLogic:
             return -2
         if from_zone == Zone.SECOND and to_zone == Zone.BACK:
             return -1
+
+    def get_attack_cost(self, num_attackers: int) -> int:
+        """Zwraca koszt inicjatywy za atak N jednostkami.
+
+        Wzór:
+            base_cost + cost_per_unit * num_attackers
+                      - next_attack_cost_decrease * (liczba ataków już wykonanych)
+        ale nigdy mniej niż min_initiative_cost.
+        """
+        cfg = self.game_config.get("atack", {}) or {}
+        base = int(cfg.get("base_cost", 10))
+        per = int(cfg.get("cost_per_unit", 3))
+        dec = int(cfg.get("next_attack_cost_decrease", 5))
+        min_c = int(cfg.get("min_initiative_cost", 5))
+
+        raw = base + per * num_attackers - dec * self.attack_count_this_turn
+        return max(min_c, raw)
 
     # ---------- DOŁĄCZANIE (bez zmian) ----------
     def can_attach_to_card(self, attached_card: Card, target_card: Card) -> bool:
@@ -313,6 +334,9 @@ class GameLogic:
 
     # ---------- TURA ----------
     def start_turn(self, player: Player):
+        self.attack_count_this_turn = 0
+        self.current_attack_cost = 0
+
         self.update_player_production(player, add=True)
         iron, steel = self.calculate_resurects_production(player)
         player.iron_production = iron
@@ -571,16 +595,27 @@ class GameLogic:
         if not attackers:
             self.add_message(f"Brak jednostek z bronią o zasięgu >= {attack_range} w strefie {zone.value}!", "error")
             return False
+
+        cost = self.get_attack_cost(len(attackers))
+        if self.current_player.initiative < cost:
+            self.add_message(
+                f"Za mało inicjatywy na atak: potrzeba {cost}, masz {self.current_player.initiative}",
+                "error",
+            )
+            return False
+
         targets = self.get_attack_zones_for_range(attack_range, zone)
         has_targets = any(zones for zones in targets.values() if zones)
         if not has_targets:
             self.add_message(f"Brak celów w zasięgu {attack_range} z tej strefy!", "error")
             return False
+
         self.attack_mode = True
         self.attack_range = attack_range
         self.attack_zones = targets
         self.attack_source_zone = zone
-        self.add_message("Wybierz strefę docelową (podświetlona)", "info")
+        self.current_attack_cost = cost           # <-- ZAPAMIĘTUJEMY
+        self.add_message(f"Atak: koszt {cost} inicjatywy. Wybierz strefę docelową.", "info")
         return True
 
     def get_attackers_from_zone(self, attack_range: int, zone: Zone) -> List[Card]:
@@ -606,6 +641,7 @@ class GameLogic:
         self.attack_range = 0
         self.attack_zones = {}
         self.attack_source_zone = None
+        self.current_attack_cost = 0
 
     def perform_attack_on_zone(self, target_player: Player, zone: Zone) -> bool:
         """Wykonuje atak na konkretną strefę przeciwnika."""
@@ -876,10 +912,26 @@ class GameLogic:
 
         self.cancel_attack()
         self.cancel_attack_preview()
+
+        # --- pobierz koszt inicjatywy za atak ---
+        if self.current_attack_cost > 0:
+            self.current_player.initiative -= self.current_attack_cost
+            self.attack_count_this_turn += 1
+            self.add_message(
+                f"Zapłacono {self.current_attack_cost} inicjatywy za atak "
+                f"(ataków w turze: {self.attack_count_this_turn})",
+                "info",
+            )
+            self.current_attack_cost = 0
+
+        self.cancel_attack()
+        self.cancel_attack_preview()
+
         return True
 
     def cancel_attack_preview(self):
         """Anuluje podgląd ataku."""
+        self.current_attack_cost = 0
         self.attack_preview_data = None
 
     def is_attack_preview_mode(self) -> bool:
@@ -1042,19 +1094,46 @@ class GameLogic:
         }
 
     def load_game_config(self) -> dict:
+        """Wczytuje defines/game.lua.
+
+        Plik zwraca trzy tabele: game_start, atack, discard_card.
+        Spłaszczamy game_start na top level (żeby Player znalazł np. "initiative"),
+        a atack i discard_card zostawiamy pod własnymi kluczami.
+        """
         try:
             import lupa
             from lupa import LuaRuntime
             lua = LuaRuntime(unpack_returned_tuples=True)
             with open("defines/game.lua", "r", encoding="utf-8") as f:
                 result = lua.execute(f.read())
-            if result is not None:
-                return dict(result)
+
+            # Lua zwraca krotkę: (game_start, atack, discard_card)
+            if isinstance(result, tuple):
+                game_start, atack, discard_card = (list(result) + [{}, {}, {}])[:3]
             else:
-                return {}
+                # fallback – gdyby ktoś zmienił plik na zwracający jedną tabelę
+                game_start, atack, discard_card = result or {}, {}, {}
+
+            flat = {}
+            for k, v in dict(game_start or {}).items():
+                flat[str(k)] = v
+            flat["atack"] = dict(atack or {})
+            flat["discard_card"] = dict(discard_card or {})
+            return flat
+
         except Exception as e:
-            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych wartości.")
-            return {}
+            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
+            import traceback
+            traceback.print_exc()
+            return {
+                "atack": {
+                    "base_cost": 10,
+                    "cost_per_unit": 3,
+                    "next_attack_cost_decrease": 5,
+                    "min_initiative_cost": 5,
+                },
+                "discard_card": {"initiative_cost": 1},
+            }
 
     def set_view(self, view):
         self.view = view

@@ -29,6 +29,8 @@ save_deck: "Zapisz talię"
 back: "Powrót"
 deck_list: "Twoja talia"
 all_cards: "Wszystkie karty"
+observe: "Obserwuj"
+hide: "Ukryj"
 
 save_as: "Zapisz jako"
 delete_deck: "Usuń talię"

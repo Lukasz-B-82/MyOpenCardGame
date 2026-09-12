@@ -15,6 +15,7 @@ class PlayerConfig:
         self.active = True
         self.type = "human"  # "human" lub "ai"
         self.deck = "default"  # nazwa talii
+        self.observe = True
 
 class MainMenu:
     def __init__(self, screen, clock):
@@ -46,6 +47,18 @@ class MainMenu:
         self.components = []
         self.create_buttons()
         self.create_components()
+
+    def get_type_options(self):
+        """Zwraca listę (value, label) dostępnych typów gracza."""
+        options = [("human", self.localization.get("human", "Człowiek"))]
+        try:
+            from game_ai import heuristic_ai  # noqa: F401  (rejestruje "heuristic")
+            from game_ai.registry import list_models
+            for name in list_models():
+                options.append((name, f"AI {name.capitalize()}"))
+        except Exception as e:
+            print(f"[Menu] Brak modułów AI: {e}")
+        return options
 
     def load_background_images(self):
         """Wczytuje i skaluje obrazy tła do aktualnego rozmiaru okna."""
@@ -89,14 +102,14 @@ class MainMenu:
         })
         # Edytor
         self.buttons.append({
-            "rect": pygame.Rect(self.screen_width - 250, 50, 200, 70),
+            "rect": pygame.Rect(self.screen_width - 300, 50, 275, 70),
             "text": self.localization.get("editor"),
             "action": self.open_deck_editor,
             "type": "editor"
         })
         # Fullscreen
         self.buttons.append({
-            "rect": pygame.Rect(self.screen_width - 250, self.screen_height - 100, 200, 70),
+            "rect": pygame.Rect(self.screen_width - 300, self.screen_height - 100, 275, 70),
             "text": self.localization.get("fullscreen"),
             "action": self.toggle_fullscreen,
             "type": "fullscreen"
@@ -110,7 +123,7 @@ class MainMenu:
         })
         # Przegeneruj karty
         self.buttons.append({
-            "rect": pygame.Rect(self.screen_width - 250, self.screen_height - 180, 200, 50),
+            "rect": pygame.Rect(self.screen_width - 300, self.screen_height - 180, 275, 70),
             "text": self.localization.get("regenerate_cards"),
             "action": self.regenerate_cards,
             "type": "regenerate"
@@ -130,7 +143,7 @@ class MainMenu:
         for idx, player in enumerate(self.players):
             y = y_start + idx * 75
             # Checkbox aktywności
-            rect_check = pygame.Rect(self.screen_width//2 - 350, y - 10, 50, 50)
+            rect_check = pygame.Rect(self.screen_width//2 - 450, y - 10, 50, 50)
             self.components.append({
                 "rect": rect_check,
                 "type": "checkbox",
@@ -139,7 +152,7 @@ class MainMenu:
                 "action": lambda i=idx: self.toggle_active(i)
             })
             # Etykieta "Gracz X"
-            rect_label = pygame.Rect(self.screen_width//2 - 250, y, 80, 30)
+            rect_label = pygame.Rect(self.screen_width//2 - 350, y, 80, 30)
             self.components.append({
                 "rect": rect_label,
                 "type": "label",
@@ -148,16 +161,27 @@ class MainMenu:
                 "action": None
             })
             # Przycisk typu (Człowiek / AI)
-            rect_type = pygame.Rect(self.screen_width//2 - 50, y - 10, 120, 50)
+            rect_type = pygame.Rect(self.screen_width//2 - 120, y - 10, 160, 50)
+            options = dict(self.get_type_options())
             self.components.append({
                 "rect": rect_type,
                 "type": "type_button",
                 "player": idx,
-                "text": self.localization.get("human") if player.type == "human" else "AI",
-                "action": lambda i=idx: self.toggle_type(i)
+                "text": options.get(player.type, player.type),
+                "action": lambda i=idx: self.cycle_type(i)
+            })
+            # Przycisk obserwacji (tylko aktywny dla AI)
+            rect_obs = pygame.Rect(self.screen_width//2 + 80, y - 10, 120, 50)
+            is_ai = player.type != "human"
+            self.components.append({
+                "rect": rect_obs,
+                "type": "observe_button",
+                "player": idx,
+                "text": self._observe_label(player) if is_ai else "—",
+                "action": (lambda i=idx: self.toggle_observe(i)) if is_ai else None
             })
             # Wybór talii – dynamiczna lista z katalogu decks/
-            rect_deck = pygame.Rect(self.screen_width//2 + 150, y - 10, 180, 50)
+            rect_deck = pygame.Rect(self.screen_width//2 + 240, y - 10, 200, 50)
             deck_names = self.get_deck_list()
             if player.deck not in deck_names:
                 player.deck = deck_names[0] if deck_names else "default"
@@ -181,18 +205,45 @@ class MainMenu:
     def toggle_active(self, idx):
         self.players[idx].active = not self.players[idx].active
 
-    def toggle_type(self, idx):
+    def _observe_label(self, player) -> str:
+        """Etykieta przycisku obserwacji dla danego gracza."""
+        return self.localization.get("observe") if player.observe else self.localization.get("hide")
+
+    def toggle_observe(self, idx):
         p = self.players[idx]
-        p.type = "ai" if p.type == "human" else "human"
+        p.observe = not p.observe
+        self.update_observe_button(idx)
+
+    def update_observe_button(self, idx):
+        """Odświeża tekst i aktywność przycisku obserwacji dla jednego gracza."""
+        p = self.players[idx]
+        for comp in self.components:
+            if comp["type"] == "observe_button" and comp["player"] == idx:
+                if p.type == "human":
+                    comp["text"] = "—"
+                    comp["action"] = None
+                else:
+                    comp["text"] = self._observe_label(p)
+                    comp["action"] = lambda i=idx: self.toggle_observe(i)
+                break
+
+    def cycle_type(self, idx):
+        options = [v for v, _ in self.get_type_options()]
+        p = self.players[idx]
+        try:
+            i = (options.index(p.type) + 1) % len(options)
+        except ValueError:
+            i = 0
+        p.type = options[i]
         self.update_type_button_texts()
+        self.update_observe_button(idx)
 
     def update_type_button_texts(self):
-        """Odświeża teksty przycisków typu dla wszystkich graczy."""
+        options = dict(self.get_type_options())
         for comp in self.components:
             if comp["type"] == "type_button":
-                idx = comp["player"]
-                p = self.players[idx]
-                comp["text"] = self.localization.get("human") if p.type == "human" else "AI"
+                p = self.players[comp["player"]]
+                comp["text"] = options.get(p.type, p.type)
 
     def cycle_deck(self, idx):
         decks = self.get_deck_list()
@@ -286,11 +337,27 @@ class MainMenu:
                     comp["text"], size_key="StoryScript M", color=TEXT_COLOR, center=rect.center
                 )
                 self.screen.blit(text_surf, text_rect)
-            elif comp["type"] == "type_button" or comp["type"] == "deck_button":
-                pygame.draw.rect(self.screen, color, rect)
-                pygame.draw.rect(self.screen, BLACK, rect, 2)
+            elif comp["type"] in ("type_button", "deck_button", "observe_button"):
+                is_disabled = (comp["type"] == "observe_button" and comp.get("action") is None)
+                if is_disabled:
+                    pygame.draw.rect(self.screen, (70, 70, 70), rect)   # ciemny szary
+                    pygame.draw.rect(self.screen, (40, 40, 40), rect, 2)
+                    text_color = (120, 120, 120)
+                else:
+                    # Kolor zależny od stanu observe: zielony gdy observe, niebieski gdy hide
+                    if comp["type"] == "observe_button":
+                        p = self.players[comp["player"]]
+                        base_color = (60, 160, 60) if p.observe else (90, 90, 130)
+                        color = (min(255, base_color[0] + 40),
+                                min(255, base_color[1] + 40),
+                                min(255, base_color[2] + 40)) if hover else base_color
+                    else:
+                        color = BUTTON_HOVER_COLOR if hover else BUTTON_COLOR
+                    pygame.draw.rect(self.screen, color, rect)
+                    pygame.draw.rect(self.screen, BLACK, rect, 2)
+                    text_color = TEXT_COLOR
                 text_surf, text_rect = fonts.render_text(
-                    comp["text"], size_key="StoryScript S", color=TEXT_COLOR, center=rect.center
+                    comp["text"], size_key="StoryScript S", color=text_color, center=rect.center
                 )
                 self.screen.blit(text_surf, text_rect)
 
@@ -358,6 +425,7 @@ class MainMenu:
                     "index": p.index,
                     "name": f"Gracz {p.index+1}",
                     "type": p.type,
+                    "observe": p.observe,
                     "deck": p.deck
                 })
         return self.language, players_config, getattr(self, 'return_to_editor', False)
