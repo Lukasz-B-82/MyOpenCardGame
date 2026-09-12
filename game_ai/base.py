@@ -125,18 +125,20 @@ class BaseAI(ABC):
                         actions.append(("move", soldier, dst))
 
         # 4) ataki – dla każdego zasięgu i strefy źródłowej
-        for atk_range in (1, 2, 3):
-            for src_zone in (Zone.FRONT, Zone.SECOND, Zone.BACK):
-                attackers = logic.get_attackers_from_zone(atk_range, src_zone)
-                if not attackers:
-                    continue
-                cost = logic.get_attack_cost(len(attackers))
-                if p.initiative < cost:
-                    continue
-                targets = logic.get_attack_zones_for_range(atk_range, src_zone)
-                for enemy, zones in targets.items():
-                    for z in zones:
-                        actions.append(("attack", atk_range, src_zone, enemy, z))
+        min_turns = int(logic.game_config.get("min_turns", 10))
+        if logic.turn >= min_turns:
+            for atk_range in (1, 2, 3):
+                for src_zone in (Zone.FRONT, Zone.SECOND, Zone.BACK):
+                    attackers = logic.get_attackers_from_zone(atk_range, src_zone)
+                    if not attackers:
+                        continue
+                    cost = logic.get_attack_cost(len(attackers))
+                    if p.initiative < cost:
+                        continue
+                    targets = logic.get_attack_zones_for_range(atk_range, src_zone)
+                    for enemy, zones in targets.items():
+                        for z in zones:
+                            actions.append(("attack", atk_range, src_zone, enemy, z))
 
         # 5) dobranie karty
         if (len(p.hand) < p.max_hand_size

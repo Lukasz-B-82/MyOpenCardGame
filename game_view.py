@@ -557,14 +557,24 @@ class GameView:
 
                 # ---------- PRZYCISKI ATAKU DLA KAZDEJ STREFY ----------
                 if zone in [Zone.FRONT, Zone.SECOND, Zone.BACK]:
-                    summary = self.logic.get_attack_summary(zone)  # teraz z parametrem
-                    # Sprawdź, czy w ogóle są jakieś ataki w tej strefie
+                    min_turns = int(self.logic.game_config.get("min_turns", 10))
+                    summary = self.logic.get_attack_summary(zone)
                     has_attack = any(s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0 for s in summary.values())
-                    if has_attack:
-                        # Rysuj przyciski w tej strefie
-                        btn_x = rect.right - 130
+
+                    if has_attack and self.logic.turn < min_turns:
+                        # Za wcześnie – pokazujemy informację zamiast przycisków
+                        info_surf, _ = fonts.render_text(
+                            f"Ataki od tury {min_turns}",
+                            size_key="StoryScript XXS",
+                            color=(255, 150, 150),
+                            topleft=(rect.right - 130, rect.y + 8),
+                        )
+                        self.screen.blit(info_surf, info_surf.get_rect(
+                            topleft=(rect.right - 130, rect.y + 8)))
+                    elif has_attack:
+                        btn_x = rect.right - 150
                         btn_y = rect.y + 8
-                        btn_width = 120
+                        btn_width = 125
                         btn_height = 25
                         btn_spacing = 4
 
@@ -572,10 +582,7 @@ class GameView:
                             s = summary.get(r, {"soft": 0, "hard": 0, "air": 0})
                             if s["soft"] > 0 or s["hard"] > 0 or s["air"] > 0:
                                 btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
-                                # musimy zapamiętać, która strefa i jaki zasięg
-                                # np. klucz (zone, r) -> btn_rect
                                 self.attack_buttons[(zone, r)] = btn_rect
-
                                 parts = []
                                 if s["soft"] > 0:
                                     parts.append(f"Soft: {s['soft']:.1f}")
@@ -584,7 +591,6 @@ class GameView:
                                 if s["air"] > 0:
                                     parts.append(f"Air: {s['air']:.1f}")
                                 label = f"Zasięg: {r}: " + ", ".join(parts)
-
                                 draw_button(
                                     self.screen,
                                     btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height,

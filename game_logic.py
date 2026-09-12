@@ -184,8 +184,7 @@ class GameLogic:
                 return False
         
         if target_card.card_type == CardType.SOLDIER:
-            has_same_type = any(c.card_type == attached_card.card_type for c in target_card.attached_cards)
-            if has_same_type:
+            if len(target_card.attached_cards) >= 1:
                 return False
         
         return True
@@ -598,6 +597,14 @@ class GameLogic:
 
     def start_attack_with_range(self, attack_range: int, zone: Zone) -> bool:
         """Rozpoczyna tryb ataku z zadanym zasięgiem i ze wskazanej strefy."""
+        min_turns = int(self.game_config.get("min_turns", 10))
+        if self.turn < min_turns:
+            self.add_message(
+                f"Ataki dostępne dopiero od tury {min_turns} (obecnie: {self.turn})",
+                "error",
+            )
+            return False
+        
         attackers = self.get_attackers_from_zone(attack_range, zone)
         if not attackers:
             self.add_message(f"Brak jednostek z bronią o zasięgu >= {attack_range} w strefie {zone.value}!", "error")
@@ -1184,41 +1191,6 @@ class GameLogic:
                 "victory": {"advantage_threshold": 0.75},
                 "min_turns": 10,
                 "max_turns": 50,
-            }
-
-        except Exception as e:
-            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
-            import traceback
-            traceback.print_exc()
-            return {
-                "atack": {
-                    "base_cost": 10,
-                    "cost_per_unit": 3,
-                    "next_attack_cost_decrease": 5,
-                    "min_initiative_cost": 5,
-                },
-                "discard_card": {"initiative_cost": 1},
-                "card_value": {
-                    "TERRAIN": 1, "WORKER": 1, "SOLDIER": 2,
-                    "WEAPON": 3, "BUILDING": 3, "CITY": 3,
-                    "TANK": 5, "PLANE": 5, "ARTILLERY": 5,
-                    "VEHICLE": 3, "CAR": 2,
-                },
-                "victory": {"advantage_threshold": 0.75},
-            }
-
-        except Exception as e:
-            print(f"Nie udało się wczytać defines/game.lua: {e}, używam domyślnych.")
-            import traceback
-            traceback.print_exc()
-            return {
-                "atack": {
-                    "base_cost": 10,
-                    "cost_per_unit": 3,
-                    "next_attack_cost_decrease": 5,
-                    "min_initiative_cost": 5,
-                },
-                "discard_card": {"initiative_cost": 1},
             }
 
     def set_view(self, view):
