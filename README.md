@@ -53,6 +53,7 @@ Gra oferuje:
 - Pillow (PIL)
 - Lupa (do odczytu plików Lua)
 - PyYAML
+- CairoSVG
 
 ---
 
@@ -65,7 +66,7 @@ Gra oferuje:
 
 2. **Zainstaluj zależności**
     ```bash
-    pip install pygame pillow lupa pyyaml
+    pip install pygame pillow lupa pyyaml cairosvg
 
 2. **Uruchom grę**
     ```bash
