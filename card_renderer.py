@@ -1,6 +1,11 @@
 # card_renderer.py
-import pygame
 import os
+# Zmuszamy reportlab do użycia wbudowanego backendu _renderPM
+# (bez Cairo, bez GTK, bez rlPyCairo). Musi być PRZED importem reportlab.
+os.environ["RL_USE_PYCairo"] = "0"
+
+import io
+import pygame
 from card import Card
 from fonts import fonts
 
@@ -10,6 +15,7 @@ _icon_cache = {}
 _flag_cache = {}
 _frame_defs = {}
 _loaded_card_cache = {}
+_svg_cache = {}
 
 CARDS_IMAGES_DIR = "images/cards/"
 FRAMES_DIR = "images/cards/borders/"
@@ -162,6 +168,34 @@ def load_rendered_card(card, language, target_width, target_height):
             img = pygame.transform.smoothscale(img, (target_width, target_height))
         _loaded_card_cache[cache_key] = img
         return img
+    return None
+
+def load_svg_icon(path: str, size: int = 24):
+    key = (path, size)
+    if key in _svg_cache:
+        return _svg_cache[key]
+    surf = None
+    if not os.path.exists(path):
+        _svg_cache[key] = None
+        return None
+
+    try:
+        import resvg_py
+        with open(path, "r", encoding="utf-8") as f:
+            svg_str = f.read()
+        png_bytes = resvg_py.svg_to_bytes(
+            svg_string=svg_str,
+            width=size,
+            height=size,
+        )
+        surf = pygame.image.load(io.BytesIO(bytes(png_bytes))).convert_alpha()
+        _svg_cache[key] = surf
+        print(f"[svg] OK (resvg): {path} @ {size}px")
+        return surf
+    except Exception as e:
+        print(f"[svg] resvg zawiodło dla {path}: {e}")
+
+    _svg_cache[key] = None
     return None
 
 def draw_card(surface, card, x, y, width, height, language="pl"):

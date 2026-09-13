@@ -9,14 +9,16 @@ from constants import *
 from localization import Localization
 from fonts import fonts
 from card import Card, CardType, Faction, Zone, create_card_from_lua
-from card_renderer import draw_card, draw_tooltip
-from card_view import CardView  # <-- DODANE
+from card_renderer import draw_card, draw_tooltip, get_card_color, load_svg_icon
+from card_view import CardView
 import random
 
 # ---------- WCZYTYWANIE KART ----------
 ALL_CARDS = []
 CARDS_FILE = os.path.join("defines", "cards.lua")
 DECKS_DIR = "decks"
+ICON_FOLDER_PATH = os.path.join("images", "cards", "icons", "playing_cards.svg")
+ICON_CHART_PATH  = os.path.join("images", "cards", "icons", "ssid_chart.svg")
 
 def load_cards():
     global ALL_CARDS
@@ -154,6 +156,11 @@ class DeckEditor:
         # Wszystkie karty – posortuj po nazwie z tłumaczeń
         self.all_cards = sorted(ALL_CARDS, key=lambda c: self.localization.get_card_name(c.name_key) if c.name_key else c.name)
 
+        # ---------- IKONY PRZYCISKÓW (SVG) ----------
+        self.icon_folder = load_svg_icon(ICON_FOLDER_PATH, 24)
+        self.icon_chart  = load_svg_icon(ICON_CHART_PATH, 24)
+        self.icon_folder_small = load_svg_icon(ICON_FOLDER_PATH, 20)
+
         # Przyciski
         self.buttons = []
         self.create_buttons()
@@ -187,6 +194,11 @@ class DeckEditor:
         self.type_icons = []
         self._build_type_icons()
 
+        # ---------- MODAL STATYSTYK (wykres) ----------
+        self.stats_visible = False
+        self._stats_bg_rect = None
+        self._stats_close_rect = None
+
     def _build_type_icons(self):
         """Buduje listę klikalnych ikon typów (raz na start / po resize)."""
         from card import CardType
@@ -196,6 +208,208 @@ class DeckEditor:
             if icon is None:
                 continue
             self.type_icons.append(DeckEditorCardTypeIcon(ct, icon))
+
+    # ---------- STATYSTYKI ----------
+    def _open_stats(self):
+        """Otwiera modal ze statystykami talii."""
+        if self.deck_picker_visible:
+            self._close_deck_picker()
+        self._build_stats_layout()
+        self.stats_visible = True
+
+    def _close_stats(self):
+        self.stats_visible = False
+        self._stats_bg_rect = None
+        self._stats_close_rect = None
+
+    def _build_stats_layout(self):
+        panel_w = min(1000, self.screen_width - 40)
+        panel_h = min(700, self.screen_height - 40)
+        px = (self.screen_width - panel_w) // 2
+        py = (self.screen_height - panel_h) // 2
+        self._stats_bg_rect = pygame.Rect(px, py, panel_w, panel_h)
+        self._stats_close_rect = pygame.Rect(
+            px + panel_w - 160, py + 15, 140, 35
+        )
+
+    def _handle_stats_click(self, pos):
+        if self._stats_close_rect and self._stats_close_rect.collidepoint(pos):
+            self._close_stats()
+            return True
+        if self._stats_bg_rect and not self._stats_bg_rect.collidepoint(pos):
+            self._close_stats()
+            return True
+        return True
+
+    def _compute_stats_data(self):
+        """Zwraca (data, N).
+
+        data: {CardType: [(x, y), ...]} – punkty linii każdego typu, gdzie
+              x = pozycja karty w talii w ORYGINALNEJ kolejności (1..N),
+              y = narastająca liczba kart danego typu do pozycji x.
+        N:    całkowita liczba kart w talii.
+        """
+        N = len(self.deck)
+        if N == 0:
+            return {}, 0
+
+        type_order = {ct: i for i, ct in enumerate(CardType)}
+
+        # Zbiór typów obecnych w talii – w deterministycznej kolejności
+        present_types = sorted(
+            set(c.card_type for c in self.deck),
+            key=lambda ct: type_order.get(ct, 99),
+        )
+
+        counters = {ct: 0 for ct in present_types}
+        data = {ct: [] for ct in present_types}
+
+        # Iterujemy po oryginalnej kolejności talii (self.deck)
+        for i, card in enumerate(self.deck, start=1):
+            counters[card.card_type] += 1
+            for ct in present_types:
+                data[ct].append((i, counters[ct]))
+
+        return data, N
+
+    def _draw_stats_modal(self):
+        if not self.stats_visible or not self._stats_bg_rect:
+            return
+
+        # overlay
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        bg = self._stats_bg_rect
+        pygame.draw.rect(self.screen, (35, 35, 50), bg)
+        pygame.draw.rect(self.screen, (200, 200, 220), bg, 2)
+
+        # tytuł
+        title = f"Statystyki talii: {self.current_deck_name}"
+        ts, tr = fonts.render_text(title, size_key="StoryScript L", color=WHITE,
+                                   center=(bg.centerx, bg.y + 35))
+        self.screen.blit(ts, tr)
+
+        # przycisk "Zamknij" w prawym górnym rogu
+        rect = self._stats_close_rect
+        mouse_pos = pygame.mouse.get_pos()
+        hover = rect.collidepoint(mouse_pos)
+        color = (180, 80, 80) if hover else (150, 60, 60)
+        pygame.draw.rect(self.screen, color, rect)
+        pygame.draw.rect(self.screen, BLACK, rect, 2)
+        cs, cr = fonts.render_text("Zamknij", size_key="StoryScript S",
+                                   color=WHITE, center=rect.center)
+        self.screen.blit(cs, cr)
+
+        data, N = self._compute_stats_data()
+        if N == 0:
+            msg, mr = fonts.render_text("Pusta talia", size_key="StoryScript M",
+                                        color=(150, 150, 150),
+                                        center=(bg.centerx, bg.centery))
+            self.screen.blit(msg, mr)
+            return
+
+        # obszar wykresu
+        chart_left = bg.x + 80
+        chart_top = bg.y + 80
+        chart_right = bg.right - 40
+        chart_bottom = bg.bottom - 220
+        chart_w = chart_right - chart_left
+        chart_h = chart_bottom - chart_top
+
+        pygame.draw.rect(self.screen, (20, 20, 30),
+                         (chart_left, chart_top, chart_w, chart_h))
+        pygame.draw.rect(self.screen, (100, 100, 120),
+                         (chart_left, chart_top, chart_w, chart_h), 1)
+
+        # max Y = największa liczba kart jednego typu
+        max_y = 1
+        for pts in data.values():
+            for _, y in pts:
+                if y > max_y:
+                    max_y = y
+
+        if max_y <= 5:
+            step = 1
+        elif max_y <= 10:
+            step = 2
+        elif max_y <= 20:
+            step = 5
+        elif max_y <= 100:
+            step = 10
+        else:
+            step = max(1, max_y // 10)
+
+        tick_vals = list(range(0, max_y + 1, step))
+        if tick_vals[-1] != max_y:
+            tick_vals.append(max_y)
+
+        for val in tick_vals:
+            py_line = chart_bottom - (val / max_y) * chart_h
+            pygame.draw.line(self.screen, (60, 60, 80),
+                             (chart_left, py_line), (chart_right, py_line), 1)
+            lbl_s, lbl_r = fonts.render_text(str(val),
+                                             size_key="StoryScript XXS",
+                                             color=(200, 200, 200))
+            lbl_r.midright = (chart_left - 8, py_line)
+            self.screen.blit(lbl_s, lbl_r)
+
+        # osie X – etykiety 1..N
+        x_step = 1 if N <= 15 else max(1, N // 10)
+        for x in range(1, N + 1, x_step):
+            px_line = chart_left + (x - 1) / max(1, N - 1) * chart_w
+            pygame.draw.line(self.screen, (60, 60, 80),
+                             (px_line, chart_bottom), (px_line, chart_bottom + 4), 1)
+            lbl_s, lbl_r = fonts.render_text(str(x),
+                                             size_key="StoryScript XXS",
+                                             color=(200, 200, 200))
+            lbl_r.midtop = (px_line, chart_bottom + 6)
+            self.screen.blit(lbl_s, lbl_r)
+
+        # etykiety osi
+        lbl_s, lbl_r = fonts.render_text("Liczba kart w talii",
+                                         size_key="StoryScript XS",
+                                         color=(220, 220, 220))
+        lbl_r.midtop = (chart_left + chart_w // 2, chart_bottom + 30)
+        self.screen.blit(lbl_s, lbl_r)
+
+        # konwersja (x, y) -> piksele
+        def to_px(x, y):
+            px_p = chart_left + (x - 1) / max(1, N - 1) * chart_w
+            py_p = chart_bottom - (y / max_y) * chart_h
+            return px_p, py_p
+
+        # linie
+        for ct, pts in data.items():
+            color = get_card_color(ct)
+            px_pts = [to_px(x, y) for x, y in pts]
+            if len(px_pts) >= 2:
+                pygame.draw.lines(self.screen, color, False, px_pts, 2)
+            for p in px_pts:
+                pygame.draw.circle(self.screen, color,
+                                   (int(p[0]), int(p[1])), 3)
+
+        # legenda
+        legend_x = bg.x + 40
+        legend_y = chart_bottom + 60
+        row_limit = bg.right - 40
+        for ct in data.keys():
+            count = data[ct][-1][1] if data[ct] else 0
+            color = get_card_color(ct)
+            pygame.draw.rect(self.screen, color, (legend_x, legend_y, 14, 14))
+            pygame.draw.rect(self.screen, (0, 0, 0),
+                             (legend_x, legend_y, 14, 14), 1)
+            text = f"{ct.value} ({count})"
+            t_s, t_r = fonts.render_text(text,
+                                         size_key="StoryScript XXS",
+                                         color=(220, 220, 220),
+                                         topleft=(legend_x + 20, legend_y))
+            self.screen.blit(t_s, t_r)
+            legend_x += 20 + t_r.width + 25
+            if legend_x > row_limit - 100:
+                legend_x = bg.x + 40
+                legend_y += 22
 
     # ---------- WYBIERAK TALII ----------
     def _open_deck_picker(self):
@@ -313,12 +527,14 @@ class DeckEditor:
             pygame.draw.rect(self.screen, color, rect)
             pygame.draw.rect(self.screen, BLACK, rect, 2)
 
-            label = f"📂 {btn['deck']}" + (" *" if is_current else "")
-            t_surf, t_rect = fonts.render_text(
-                label, size_key="StoryScript S", color=WHITE,
+            label = btn["deck"] + (" *" if is_current else "")
+            self._draw_icon_text(
+                label,
+                self.icon_folder_small,
                 center=rect.center,
+                text_color=WHITE,
+                size_key="StoryScript S",
             )
-            self.screen.blit(t_surf, t_rect)
 
         # przycisk "Zamknij"
         if self._picker_close_rect:
@@ -425,11 +641,22 @@ class DeckEditor:
         x += btn_width + 10
         
         self.buttons.append({
-            "rect": pygame.Rect(x, btn_y, 140, btn_height),
-            "text": f"📂 {self.current_deck_name}",
+            "rect": pygame.Rect(x, btn_y, 160, btn_height),
+            "text": self.current_deck_name,
+            "icon": self.icon_folder,
             "action": self.show_deck_selection,
             "type": "deck_selector"
         })
+
+        x += 150
+
+        self.buttons.append({
+            "rect": pygame.Rect(x, btn_y, 170, btn_height),
+            "text": "Statystyki",
+            "icon": self.icon_chart,
+            "action": self._open_stats,
+            "type": "stats"
+        })   
         
         x = self.screen_width - 150
         self.buttons.append({
@@ -455,7 +682,7 @@ class DeckEditor:
             self.deck_list = self.get_deck_list()
             for btn in self.buttons:
                 if btn["type"] == "deck_selector":
-                    btn["text"] = f"📂 {name}"
+                    btn["text"] = name
         elif name in self.deck_list:
             print(f"Talia '{name}' już istnieje!")
         else:
@@ -477,6 +704,27 @@ class DeckEditor:
     def back_to_menu(self):
         self.save_deck(self.current_deck_name)
         self.running = False
+
+    def _draw_icon_text(self, text, icon, center,
+                        text_color=(255, 255, 255),
+                        size_key="StoryScript S", gap=8):
+        """Rysuje ikonę + tekst wyśrodkowane w pionie wokół `center`."""
+        t_surf, t_rect = fonts.render_text(
+            text, size_key=size_key, color=text_color
+        )
+        icon_w = icon.get_width() if icon else 0
+        icon_w_with_gap = icon_w + (gap if icon else 0)
+        total_w = icon_w_with_gap + t_rect.width
+
+        x0 = center[0] - total_w // 2
+        cy = center[1]
+
+        if icon:
+            iy = cy - icon.get_height() // 2
+            self.screen.blit(icon, (x0, iy))
+            x0 += icon_w + gap
+
+        self.screen.blit(t_surf, (x0, cy - t_surf.get_height() // 2))
 
     def _get_type_icon(self, card_type, size: int = 64):
         """Zwraca przeskalowaną ikonę typu karty (cache) lub None."""
@@ -573,6 +821,9 @@ class DeckEditor:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                if self.stats_visible:
+                    self._close_stats()
+                    continue
                 if self.deck_picker_visible:
                     self._close_deck_picker()
                     continue
@@ -598,7 +849,11 @@ class DeckEditor:
                     else:
                         self.scroll_offset += 30
                 elif event.button == 1:
-                    # 1) Modal wyboru talii – zjada kliknięcia
+                    # 1) Modal statystyk – zjada kliknięcia
+                    if self.stats_visible:
+                        self._handle_stats_click(event.pos)
+                        return                    
+                    # 2) Modal wyboru talii – zjada kliknięcia
                     if self.deck_picker_visible:
                         self._handle_picker_click(event.pos)
                         return
@@ -679,13 +934,13 @@ class DeckEditor:
         pygame.draw.rect(self.screen, (50, 50, 50), left_rect)
         pygame.draw.rect(self.screen, BLACK, left_rect, 2)
 
-        deck_name_surf, _ = fonts.render_text(
-            f"📂 {self.current_deck_name}",
+        self._draw_icon_text(
+            self.current_deck_name,
+            self.icon_folder_small,
+            center=(left_width // 2, 115),
+            text_color=(200, 200, 200),
             size_key="StoryScript S",
-            color=(200, 200, 200),
-            center=(left_width//2, 115)
         )
-        self.screen.blit(deck_name_surf, deck_name_surf.get_rect(center=(left_width//2, 115)))
 
         # Karty w lewym panelu z przewijaniem
         y = 150 - self.left_scroll_offset
@@ -777,13 +1032,13 @@ class DeckEditor:
             color = BUTTON_HOVER_COLOR if hover else BUTTON_COLOR
             pygame.draw.rect(self.screen, color, rect)
             pygame.draw.rect(self.screen, BLACK, rect, 2)
-            text_surf, text_rect = fonts.render_text(
+            self._draw_icon_text(
                 btn["text"],
+                btn.get("icon"),
+                center=rect.center,
+                text_color=TEXT_COLOR,
                 size_key="StoryScript S",
-                color=TEXT_COLOR,
-                center=rect.center
             )
-            self.screen.blit(text_surf, text_rect)
 
         # ---------- TOOLTIP (używamy CardView) ----------
         if self.hovered_card:
@@ -819,6 +1074,9 @@ class DeckEditor:
 
         # ---------- WYBIERAK TALII (modal, na wierzchu) ----------
         self._draw_deck_picker()
+
+        # ---------- STATYSTYKI (modal, na wierzchu) ----------
+        self._draw_stats_modal()
 
     def run(self):
         last_time = pygame.time.get_ticks()

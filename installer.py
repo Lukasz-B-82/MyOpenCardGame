@@ -8,7 +8,7 @@ def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
 def check_and_install():
-    required = ["Pillow", "pygame", "pyyaml", "lupa"]
+    required = ["Pillow", "pygame", "pyyaml", "lupa", "cairosvg"]
     for pkg in required:
         try:
             if importlib.util.find_spec(pkg.lower()) is None:

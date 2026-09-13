@@ -65,8 +65,16 @@ Gra oferuje:
    cd OpenCardGame
 
 2. **Zainstaluj zależności**
-    ```bash
-    pip install pygame pillow lupa pyyaml cairosvg svglib reportlab
+   ```bash
+   pip install pygame pillow lupa pyyaml resvg-py
+   ```
+
+   Opcjonalnie – automatyczny installer (sprawdza i doinstalowuje brakujące pakiety):
+   ```bash
+   python installer.py
+   ```
+
+   **Uwaga o ikonach SVG:** do wyświetlania ikon przycisków (`📂`, `📊`) używamy `resvg-py` – biblioteki opartej na Rust, która ma gotowe wheels dla Windows i **nie wymaga** Cairo ani GTK. Jeśli `resvg-py` nie zadziała na Twojej platformie, ikony zostaną pominięte (przyciski wyświetlą sam tekst).
 
 2. **Uruchom grę**
     ```bash
@@ -75,55 +83,92 @@ Gra oferuje:
 ## 📁 Struktura projektu
 
 ```text
-    📁 OpenCardGame/
-    │
-    ├── main.py                 # Punkt wejścia
-    ├── menu.py                 # Menu główne
-    ├── game.py                 # Główna pętla gry (łączy logikę i widok)
-    ├── game_logic.py           # Logika gry (zagrywanie, dołączanie, tury, zasoby)
-    ├── game_view.py            # Rysowanie całej planszy (strefy, ręka, przeciwnicy)
-    ├── player.py               # Klasa gracza (ręka, talia, strefy, zasoby)
-    ├── card.py                 # Klasa karty i enuny (CardType, Faction, Zone)
-    ├── card_view.py            # Wyświetlanie pojedynczej karty (tooltip, podgląd)
-    ├── card_renderer.py        # Renderowanie kart (ładowanie obrazków, ramek)
-    ├── card_generator.py       # Generowanie plików PNG kart
-    ├── deck_editor.py          # Edytor talii
-    ├── fonts.py                # Zarządzanie czcionkami (singleton)
-    ├── localization.py         # Obsługa tłumaczeń (YAML)
-    ├── constants.py            # Stałe (rozmiary, kolory, ścieżki)
-    ├── README.md               # Ten plik
-    │
-    ├── 📁 defines/             # Pliki konfiguracyjne w Lua
-    │   ├── cards.lua           # Definicje wszystkich kart
-    │   ├── frames.lua          # Definicje ramek
-    │   └── game.lua            # Konfiguracja gry (inicjatywa, max_hand_size, itp.)
-    │
-    ├── 📁 decks/               # Talie graczy (JSON)
-    │   └── default.json
-    │
-    ├── 📁 images/              # Zasoby graficzne
-    │   ├── 📁 cards/           # Obrazki kart
-    │   │   ├── backs/          # Rewersy kart
-    │   │   ├── borders/        # Ramki
-    │   │   └── icons/          # Ikony typów i flagi frakcji
-    │   ├── 📁 board/           # Tła planszy
-    │   └── 📁 start_screen/    # Tła menu
-    │
-    ├── 📁 fonts/               # Pliki czcionek (TTF)
-    │   ├── StoryScript-Regular.ttf
-    │   ├── BIZUDGothic-Regular.ttf
-    │   └── BIZUDGothic-Bold.ttf
-    │
-    ├── 📁 translations/        # Tłumaczenia (YAML)
-    │   ├── 📁 pl/              # Polskie
-    │   │   ├── ui_texts.yaml
-    │   │   └── card_names.yaml
-    │   └── 📁 en/              # Angielskie
-    │       ├── ui_texts.yaml
-    │       └── card_names.yaml
-    │
-    └── 📁 rendered_cards/      # Wygenerowane obrazki kart (PNG)
+📁 OpenCardGame/
+│
+├── main.py                     # Punkt wejścia
+├── menu.py                     # Menu główne (wybór graczy, AI, obserwacja)
+├── game.py                     # Główna pętla gry + integracja AI z turą
+├── game_logic.py               # Logika gry (zagrywanie, dołączanie, walka, zwycięstwo)
+├── game_view.py                # Rysowanie planszy, podglądu ataku, ekranu zwycięstwa
+├── player.py                   # Klasa gracza (ręka, talia, strefy, zasoby)
+├── card.py                     # Klasa karty + enuny (CardType, Faction, Zone)
+├── card_view.py                # Wyświetlanie pojedynczej karty (tooltip, podgląd)
+├── card_renderer.py            # Ładowanie obrazków, ramek, SVG
+├── card_generator.py           # Generowanie plików PNG kart
+├── deck_editor.py              # Edytor talii (modal talii, filtr typów, statystyki)
+├── dice.py                     # Obsługa kości (definicje, rozkłady, rzuty)
+├── fonts.py                    # Zarządzanie czcionkami (singleton)
+├── localization.py             # Obsługa tłumaczeń (YAML)
+├── constants.py                # Stałe (rozmiary, kolory, ścieżki)
+├── render_utils.py             # Pomocnicze funkcje rysowania (półprzezroczyste tła, przyciski)
+├── installer.py                # Automatyczna instalacja zależności (pip)
+├── README.md                   # Ten plik
+│
+├── 📁 game_ai/                 # Moduły AI przeciwników
+│   ├── __init__.py             # Pakiet AI
+│   ├── base.py                 # Abstrakcyjny interfejs BaseAI (enumeracja akcji, execute, encode)
+│   ├── registry.py             # Rejestr modeli AI (register, create_ai, list_models)
+│   ├── heuristic_ai.py         # AI heurystyczne (punktacja akcji, wagi)
+│   ├── random_ai.py            # Losowy baseline (do testów)
+│   │
+│   ├── logger.py               # (planowane) zapis partii do plików .jsonl
+│   ├── neural_ai.py            # (planowane) AI oparte o sieć neuronową (TF/Keras)
+│   └── config.py               # (planowane) loader defines/ai_heuristic.lua
+│
+├── 📁 tools/                   # (planowane) skrypty pomocnicze
+│   ├── replay.py               # Analiza logów partii
+│   ├── simulate.py             # Symulacje headless (AI vs AI, N gier)
+│   └── train_imitation.py      # Trening sieci na logach heurystyki
+│
+├── 📁 logs/                    # (planowane) zapisy partii i modeli
+│   ├── games/                  # Partie w formacie .jsonl
+│   └── models/                 # Zapisane modele sieci (.keras)
+│
+├── 📁 defines/                 # Pliki konfiguracyjne w Lua
+│   ├── cards.lua               # Definicje wszystkich kart
+│   ├── frames.lua              # Definicje ramek kart
+│   ├── dice.lua                # Definicje kości (ścianki, obrazy, wartości)
+│   ├── game.lua                # Konfiguracja gry (start, atak, wagi kart, zwycięstwo)
+│   └── ai_heuristic.lua        # Domyślne wagi heurystycznego AI
+│
+├── 📁 decks/                   # Talie graczy (JSON)
+│   └── default.json
+│
+├── 📁 images/                  # Zasoby graficzne
+│   ├── 📁 cards/               # Obrazki kart
+│   │   ├── backs/              # Rewersy kart
+│   │   ├── borders/            # Ramki
+│   │   └── icons/              # Ikony typów (PNG) + ikony UI (SVG)
+│   │       ├── BUILDING.png
+│   │       ├── CITY.png
+│   │       ├── SOLDIER.png
+│   │       ├── TERRAIN.png
+│   │       ├── WORKER.png
+│   │       ├── playing_cards.svg   # ikona przycisku talii
+│   │       └── ssid_chart.svg      # ikona przycisku statystyk
+│   ├── 📁 dice/                # Grafiki kości (ścianki, np. d6(3).png)
+│   ├── 📁 board/               # Tła planszy
+│   └── 📁 start_screen/        # Tła menu
+│
+├── 📁 fonts/                   # Pliki czcionek (TTF)
+│   ├── StoryScript-Regular.ttf
+│   ├── BIZUDGothic-Regular.ttf
+│   ├── BIZUDGothic-Bold.ttf
+│   └── LibertinusKeyboard-Regular.ttf
+│
+├── 📁 translations/            # Tłumaczenia (YAML)
+│   ├── 📁 pl/                  # Polskie
+│   │   ├── ui_texts.yaml       # Teksty interfejsu
+│   │   ├── card_names.yaml     # Nazwy kart
+│   │   └── card_types.yaml     # Nazwy typów kart (opcjonalne)
+│   └── 📁 en/                  # Angielskie
+│       ├── ui_texts.yaml
+│       ├── card_names.yaml
+│       └── card_types.yaml
+│
+└── 📁 rendered_cards/          # Wygenerowane obrazki kart (PNG, cache)
 ```
+
 
 <a name="configuration"></a>
 ## ⚙️ Konfiguracja i rozszerzanie
