@@ -57,6 +57,72 @@ def load_cards():
 
 load_cards()
 
+class DeckEditorCardTypeIcon:
+    """Klikalna ikona typu karty w nagłówku edytora talii.
+
+    Trzyma swój stan (selected) i grafikę. Sam się rysuje i sam
+    rozpoznaje kliknięcia. DeckEditor tylko dostarcza aktualną liczbę
+    kart danego typu oraz pozycję do narysowania.
+    """
+
+    ICON_SIZE = 64
+    GAP = 8                 # odstęp ikona ↔ liczba
+    PAD_BETWEEN = 20        # odstęp między kolejnymi ikonami
+
+    def __init__(self, card_type, icon_surface: pygame.Surface):
+        self.card_type = card_type
+        self.icon = icon_surface          # już przeskalowany do ICON_SIZE
+        self.selected = True              # domyślnie włączony filtr
+        self.rect = None                  # aktualny prostokąt (przy rysowaniu)
+        self.hovered = False
+        self.count = 0                    # aktualna liczba kart w talii
+
+    # -------- geometria --------
+    def width(self, count_font) -> int:
+        """Szerokość elementu (ikona + odstęp + liczba) dla danej liczby."""
+        txt = count_font.render(str(self.count), True, (0, 0, 0))
+        return self.ICON_SIZE + self.GAP + txt.get_width()
+
+    # -------- rysowanie --------
+    def draw(self, surface, x: int, cy: int, count_font, mouse_pos) -> int:
+        """Rysuje ikonę i liczbę. Zwraca x po prawej stronie elementu."""
+        y = cy - self.ICON_SIZE // 2
+        self.rect = pygame.Rect(x, y, self.ICON_SIZE, self.ICON_SIZE)
+        self.hovered = self.rect.collidepoint(mouse_pos)
+
+        if self.selected:
+            surface.blit(self.icon, (x, y))
+            if self.hovered:
+                pygame.draw.rect(surface, (0, 200, 0), self.rect, 2)
+        else:
+            dark = self.icon.copy()
+            dark.set_alpha(80)
+            surface.blit(dark, (x, y))
+
+            ov = pygame.Surface((self.ICON_SIZE, self.ICON_SIZE),
+                                pygame.SRCALPHA)
+            ov.fill((0, 0, 0, 140))
+            surface.blit(ov, (x, y))
+
+            border = (200, 60, 60) if self.hovered else (120, 60, 60)
+            pygame.draw.rect(surface, border, self.rect, 2)
+
+        color = (255, 255, 200) if self.selected else (120, 120, 120)
+        txt = count_font.render(str(self.count), True, color)
+        tx = x + self.ICON_SIZE + self.GAP
+        ty = cy - txt.get_height() // 2
+        surface.blit(txt, (tx, ty))
+
+        return tx + txt.get_width()
+
+    # -------- interakcja --------
+    def handle_click(self, pos) -> bool:
+        """Zwraca True, jeśli kliknięto w tę ikonę."""
+        if self.rect and self.rect.collidepoint(pos):
+            self.selected = not self.selected
+            return True
+        return False
+
 class DeckEditor:
     def __init__(self, screen, clock, language="pl", deck_name="default"):
         self.screen = screen
@@ -107,6 +173,165 @@ class DeckEditor:
         self.deck_card_views = []  # lista CardView dla kart w lewym panelu
         self.card_rects = []  # (rect, card) dla prawego panelu (do kliknięć)
         self.deck_card_rects = []  # (rect, card) dla lewego panelu (do kliknięć)
+
+        # ---------- WYBIERAK TALII (modal) ----------
+        self.deck_picker_visible = False
+        self._picker_buttons = []      # [{"rect": Rect, "deck": str}]
+        self._picker_bg_rect = None
+        self._picker_close_rect = None
+
+        # ---------- IKONY TYPÓW (cache) ----------
+        self.type_icons_cache = {}   # (CardType, size) -> Surface | None
+
+        # ---------- IKONY TYPÓW (obiekty) ----------
+        self.type_icons = []
+        self._build_type_icons()
+
+    def _build_type_icons(self):
+        """Buduje listę klikalnych ikon typów (raz na start / po resize)."""
+        from card import CardType
+        self.type_icons = []
+        for ct in CardType:
+            icon = self._get_type_icon(ct, DeckEditorCardTypeIcon.ICON_SIZE)
+            if icon is None:
+                continue
+            self.type_icons.append(DeckEditorCardTypeIcon(ct, icon))
+
+    # ---------- WYBIERAK TALII ----------
+    def _open_deck_picker(self):
+        """Otwiera modal z listą talii i buduje jego layout."""
+        self._build_picker_layout()
+        self.deck_picker_visible = True
+
+    def _close_deck_picker(self):
+        self.deck_picker_visible = False
+        self._picker_buttons = []
+        self._picker_bg_rect = None
+        self._picker_close_rect = None
+
+    def _build_picker_layout(self):
+        """Liczy pozycje przycisków modala na podstawie rozmiaru ekranu."""
+        decks = self.get_deck_list()
+        n = len(decks)
+
+        panel_w = 420
+        padding = 20
+        btn_h = 42
+        btn_spacing = 6
+        header_h = 50
+        close_h = 42
+
+        panel_h = (padding
+                   + header_h
+                   + n * (btn_h + btn_spacing)
+                   + close_h
+                   + padding + 10)
+
+        px = (self.screen_width - panel_w) // 2
+        py = (self.screen_height - panel_h) // 2
+        self._picker_bg_rect = pygame.Rect(px, py, panel_w, panel_h)
+
+        self._picker_buttons = []
+        y = py + padding + header_h
+        for name in decks:
+            rect = pygame.Rect(px + padding, y, panel_w - 2 * padding, btn_h)
+            self._picker_buttons.append({"rect": rect, "deck": name})
+            y += btn_h + btn_spacing
+
+        self._picker_close_rect = pygame.Rect(
+            px + padding, y + 10, panel_w - 2 * padding, close_h
+        )
+
+    def _handle_picker_click(self, pos):
+        """Obsługuje klik w modalu. Zwraca True, jeśli event został zjedzony."""
+        # 1) kliknięcie w talię?
+        for btn in self._picker_buttons:
+            if btn["rect"].collidepoint(pos):
+                self._switch_deck(btn["deck"])
+                self._close_deck_picker()
+                return True
+        # 2) kliknięcie w "Zamknij"?
+        if self._picker_close_rect and self._picker_close_rect.collidepoint(pos):
+            self._close_deck_picker()
+            return True
+        # 3) kliknięcie poza modalem?
+        if self._picker_bg_rect and not self._picker_bg_rect.collidepoint(pos):
+            self._close_deck_picker()
+            return True
+        # 4) kliknięcie wewnątrz modala, ale poza przyciskami — zjadamy, nic nie robimy
+        return True
+
+    def _switch_deck(self, name: str):
+        """Przełącza aktualnie edytowaną talię (zapis starej, wczytanie nowej)."""
+        if name == self.current_deck_name:
+            return
+        self.save_deck(self.current_deck_name)
+        self.load_deck(name)
+        self.current_deck_name = name
+        self.deck_list = self.get_deck_list()
+        for btn in self.buttons:
+            if btn["type"] == "deck_selector":
+                btn["text"] = f"📂 {name}"
+        print(f"Wczytano talię: {name}")
+
+    def _draw_deck_picker(self):
+        """Rysuje modal z listą talii."""
+        if not self.deck_picker_visible or not self._picker_bg_rect:
+            return
+
+        # przyciemnij tło
+        overlay = pygame.Surface((self.screen_width, self.screen_height),
+                                 pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        # panel
+        bg = self._picker_bg_rect
+        pygame.draw.rect(self.screen, (45, 45, 65), bg)
+        pygame.draw.rect(self.screen, (200, 200, 220), bg, 2)
+
+        # nagłówek
+        title_surf, title_rect = fonts.render_text(
+            "Wybierz talię",
+            size_key="StoryScript M", color=WHITE,
+            center=(bg.centerx, bg.y + 30),
+        )
+        self.screen.blit(title_surf, title_rect)
+
+        # przyciski talii
+        mouse_pos = pygame.mouse.get_pos()
+        for btn in self._picker_buttons:
+            rect = btn["rect"]
+            is_current = (btn["deck"] == self.current_deck_name)
+            hover = rect.collidepoint(mouse_pos)
+
+            if is_current:
+                color = (80, 140, 80)
+            else:
+                color = BUTTON_HOVER_COLOR if hover else BUTTON_COLOR
+
+            pygame.draw.rect(self.screen, color, rect)
+            pygame.draw.rect(self.screen, BLACK, rect, 2)
+
+            label = f"📂 {btn['deck']}" + (" *" if is_current else "")
+            t_surf, t_rect = fonts.render_text(
+                label, size_key="StoryScript S", color=WHITE,
+                center=rect.center,
+            )
+            self.screen.blit(t_surf, t_rect)
+
+        # przycisk "Zamknij"
+        if self._picker_close_rect:
+            rect = self._picker_close_rect
+            hover = rect.collidepoint(mouse_pos)
+            color = (180, 80, 80) if hover else (150, 60, 60)
+            pygame.draw.rect(self.screen, color, rect)
+            pygame.draw.rect(self.screen, BLACK, rect, 2)
+            c_surf, c_rect = fonts.render_text(
+                "Zamknij", size_key="StoryScript S", color=WHITE,
+                center=rect.center,
+            )
+            self.screen.blit(c_surf, c_rect)
 
     def get_deck_list(self):
         if not os.path.exists(DECKS_DIR):
@@ -237,23 +462,8 @@ class DeckEditor:
             print("Anulowano.")
 
     def show_deck_selection(self):
-        print("=== WYBÓR TALII ===")
-        for i, name in enumerate(self.deck_list):
-            print(f"{i+1}. {name}" + (" *" if name == self.current_deck_name else ""))
-        try:
-            choice = int(input("Wybierz numer: ")) - 1
-            if 0 <= choice < len(self.deck_list):
-                selected = self.deck_list[choice]
-                if selected != self.current_deck_name:
-                    self.save_deck(self.current_deck_name)
-                    self.load_deck(selected)
-                    self.current_deck_name = selected
-                    for btn in self.buttons:
-                        if btn["type"] == "deck_selector":
-                            btn["text"] = f"📂 {selected}"
-                    print(f"Wczytano talię: {selected}")
-        except:
-            print("Anulowano.")
+        """Otwiera modal wyboru talii (zamiast terminala)."""
+        self._open_deck_picker()
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
@@ -268,6 +478,77 @@ class DeckEditor:
         self.save_deck(self.current_deck_name)
         self.running = False
 
+    def _get_type_icon(self, card_type, size: int = 64):
+        """Zwraca przeskalowaną ikonę typu karty (cache) lub None."""
+        from card_renderer import load_image, ICONS_DIR, _icon_cache
+        key = (card_type, size)
+        if key in self.type_icons_cache:
+            return self.type_icons_cache[key]
+        filename = f"{card_type.value}.png"
+        img = load_image(filename, _icon_cache, ICONS_DIR)
+        if img is None:
+            # Fallback – prostokąt z pierwszą literą typu
+            surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            surf.fill((70, 70, 70, 180))
+            pygame.draw.rect(surf, (120, 120, 120), surf.get_rect(), 2)
+            font = fonts.get_font("StoryScript M")
+            letter = card_type.value[0] if card_type.value else "?"
+            text = font.render(letter, True, (200, 200, 200))
+            surf.blit(text, text.get_rect(center=(size // 2, size // 2)))
+            self.type_icons_cache[key] = surf
+            return surf
+        scaled = pygame.transform.smoothscale(img, (size, size))
+        self.type_icons_cache[key] = scaled
+        return scaled
+
+    def _draw_deck_summary(self, right_rect):
+        """Rysuje rząd klikalnych ikon typów + liczby kart danego typu.
+
+        Kliknięcie ikony przełącza filtr (selected/not selected).
+        Odznaczone typy są wyszarzone i wykluczone z prawego panelu.
+        """
+        if not self.type_icons:
+            s, r = fonts.render_text(
+                "Brak ikon typów", size_key="StoryScript M",
+                color=(150, 150, 150),
+                center=(right_rect.centerx, 75),
+            )
+            self.screen.blit(s, r)
+            return
+
+        # Zaktualizuj liczby
+        counts = {}
+        for c in self.deck:
+            counts[c.card_type] = counts.get(c.card_type, 0) + 1
+        for ic in self.type_icons:
+            ic.count = counts.get(ic.card_type, 0)
+
+        count_font = fonts.get_font("StoryScript S")
+        pad_between = DeckEditorCardTypeIcon.PAD_BETWEEN
+
+        # Całkowita szerokość rzędu
+        total_w = sum(ic.width(count_font) for ic in self.type_icons)
+        total_w += pad_between * (len(self.type_icons) - 1)
+
+        x = right_rect.centerx - total_w // 2
+        cy = 92
+        mouse_pos = pygame.mouse.get_pos()
+
+        for ic in self.type_icons:
+            x = ic.draw(self.screen, x, cy, count_font, mouse_pos)
+            x += pad_between
+
+    def _is_type_visible(self, card_type) -> bool:
+        """True, jeśli karty danego typu mają być widoczne w prawym panelu.
+
+        Jeśli typ nie ma ikony (nie ma go w self.type_icons), traktujemy
+        go jako zawsze widoczny.
+        """
+        for ic in self.type_icons:
+            if ic.card_type == card_type:
+                return ic.selected
+        return True
+            
     def draw_card_counter(self, view, x, y, width, height):
         """Rysuje licznik kopii na karcie."""
         count = self.deck_counts.get(view.card.name_key, 0)
@@ -288,7 +569,13 @@ class DeckEditor:
 
     def handle_events(self):
         for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                if self.deck_picker_visible:
+                    self._close_deck_picker()
+                    continue
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.VIDEORESIZE:
@@ -311,19 +598,33 @@ class DeckEditor:
                     else:
                         self.scroll_offset += 30
                 elif event.button == 1:
+                    # 1) Modal wyboru talii – zjada kliknięcia
+                    if self.deck_picker_visible:
+                        self._handle_picker_click(event.pos)
+                        return
+
                     mouse_pos = event.pos
+
+                    # 2) Klik w ikonę filtra typu
+                    for ic in self.type_icons:
+                        if ic.handle_click(mouse_pos):
+                            return
+
+                    # 3) Przyciski
                     for btn in self.buttons:
                         if btn["rect"].collidepoint(mouse_pos) and btn["action"] is not None:
                             btn["action"]()
                             return
-                    # Kliknięcie w prawym panelu – dodaj kopię
+
+                    # 4) Prawy panel – dodaj kopię
                     for rect, card in self.card_rects:
                         if rect.collidepoint(mouse_pos):
                             if self.deck_counts.get(card.name_key, 0) < getattr(card, 'max_in_deck', 6):
                                 self.deck.append(card)
                                 self.deck_counts[card.name_key] = self.deck_counts.get(card.name_key, 0) + 1
                             return
-                    # Kliknięcie w lewym panelu – usuń kopię
+
+                    # 5) Lewy panel – usuń kopię
                     for rect, card in self.deck_card_rects:
                         if rect.collidepoint(mouse_pos):
                             if card in self.deck:
@@ -378,14 +679,6 @@ class DeckEditor:
         pygame.draw.rect(self.screen, (50, 50, 50), left_rect)
         pygame.draw.rect(self.screen, BLACK, left_rect, 2)
 
-        title_surf, title_rect = fonts.render_text(
-            self.localization.get("deck_list"),
-            size_key="StoryScript L",
-            color=TEXT_COLOR,
-            center=(left_width//2, 75)
-        )
-        self.screen.blit(title_surf, title_rect)
-
         deck_name_surf, _ = fonts.render_text(
             f"📂 {self.current_deck_name}",
             size_key="StoryScript S",
@@ -416,13 +709,20 @@ class DeckEditor:
         pygame.draw.rect(self.screen, (30, 30, 30), right_rect)
         pygame.draw.rect(self.screen, BLACK, right_rect, 2)
 
-        title_surf, title_rect = fonts.render_text(
-            self.localization.get("all_cards"),
-            size_key="StoryScript L",
-            color=TEXT_COLOR,
-            center=(right_rect.centerx, 75)
-        )
-        self.screen.blit(title_surf, title_rect)
+        # Nagłówek = podsumowanie typów w talii (ikony + liczniki)
+        header_h = 150
+        header_rect = pygame.Rect(right_rect.x, right_rect.y, right_rect.width, header_h)
+        pygame.draw.rect(self.screen, (30, 30, 30), header_rect)        
+        self._draw_deck_summary(right_rect)
+
+        # --- Karty: klipujemy do obszaru poniżej nagłówka ---
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(pygame.Rect(
+            right_rect.x,
+            right_rect.y + header_h,
+            right_rect.width,
+            right_rect.height - header_h,
+        ))
 
         available_width = right_rect.width - 2 * self.padding
         self.cards_per_row = 5
@@ -434,7 +734,12 @@ class DeckEditor:
         x_start = right_rect.x + self.padding
         y_start = right_rect.y + 150 - self.scroll_offset
 
-        for idx, card in enumerate(self.all_cards):
+        visible_cards = [c for c in self.all_cards
+                         if self._is_type_visible(c.card_type)]
+        if not visible_cards:
+            self.scroll_offset = 0
+
+        for idx, card in enumerate(visible_cards):
             row = idx // self.cards_per_row
             col = idx % self.cards_per_row
             x = x_start + col * (self.card_width + self.padding)
@@ -460,6 +765,9 @@ class DeckEditor:
                 pygame.draw.rect(self.screen, BLACK, rect, 2)
 
             self.card_rects.append((rect, card))
+
+        # --- Koniec klipowania ---
+        self.screen.set_clip(old_clip)
 
         # ---------- PRZYCISKI ----------
         mouse_pos = pygame.mouse.get_pos()
@@ -508,6 +816,9 @@ class DeckEditor:
                 self.preview_width, self.preview_height,
                 language=self.language
             )
+
+        # ---------- WYBIERAK TALII (modal, na wierzchu) ----------
+        self._draw_deck_picker()
 
     def run(self):
         last_time = pygame.time.get_ticks()
