@@ -66,7 +66,7 @@ Gra oferuje:
 
 2. **Zainstaluj zależności**
     ```bash
-    pip install pygame pillow lupa pyyaml cairosvg
+    pip install pygame pillow lupa pyyaml cairosvg svglib reportlab
 
 2. **Uruchom grę**
     ```bash
