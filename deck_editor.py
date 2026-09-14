@@ -19,6 +19,9 @@ CARDS_FILE = os.path.join("defines", "cards.lua")
 DECKS_DIR = "decks"
 ICON_FOLDER_PATH = os.path.join("images", "cards", "icons", "playing_cards.svg")
 ICON_CHART_PATH  = os.path.join("images", "cards", "icons", "ssid_chart.svg")
+ICON_UP_PATH     = os.path.join("images", "cards", "icons", "expand_circle_up.svg")
+ICON_DOWN_PATH   = os.path.join("images", "cards", "icons", "expand_circle_down.svg")
+ICON_DELETE_PATH = os.path.join("images", "cards", "icons", "arrow_circle_right.svg")
 
 def load_cards():
     global ALL_CARDS
@@ -160,6 +163,9 @@ class DeckEditor:
         self.icon_folder = load_svg_icon(ICON_FOLDER_PATH, 24)
         self.icon_chart  = load_svg_icon(ICON_CHART_PATH, 24)
         self.icon_folder_small = load_svg_icon(ICON_FOLDER_PATH, 20)
+        self.icon_up     = load_svg_icon(ICON_UP_PATH, 24)
+        self.icon_down   = load_svg_icon(ICON_DOWN_PATH, 24)
+        self.icon_delete = load_svg_icon(ICON_DELETE_PATH, 24)        
 
         # Przyciski
         self.buttons = []
@@ -180,6 +186,7 @@ class DeckEditor:
         self.deck_card_views = []  # lista CardView dla kart w lewym panelu
         self.card_rects = []  # (rect, card) dla prawego panelu (do kliknięć)
         self.deck_card_rects = []  # (rect, card) dla lewego panelu (do kliknięć)
+        self.deck_card_buttons = []   # [(rect, action, deck_index), ...]
 
         # ---------- WYBIERAK TALII (modal) ----------
         self.deck_picker_visible = False
@@ -648,7 +655,7 @@ class DeckEditor:
             "type": "deck_selector"
         })
 
-        x += 150
+        x += 175
 
         self.buttons.append({
             "rect": pygame.Rect(x, btn_y, 170, btn_height),
@@ -796,7 +803,66 @@ class DeckEditor:
             if ic.card_type == card_type:
                 return ic.selected
         return True
-            
+
+    def _draw_deck_card_buttons(self, card_rect: pygame.Rect, deck_index: int):
+        """Rysuje 3 małe przyciski (up/down/delete) na karcie w lewym panelu."""
+        btn_size = 24
+        gap = 4
+        margin = 6
+        x = card_rect.right - btn_size - margin
+        y = card_rect.y + margin
+
+        items = [
+            ("up",     self.icon_up,     (60, 120, 60)),   # zielony
+            ("down",   self.icon_down,   (60, 90, 140)),   # niebieski
+            ("delete", self.icon_delete, (140, 60, 60)),   # czerwony
+        ]
+        mouse_pos = pygame.mouse.get_pos()
+
+        for name, icon, base_color in items:
+            r = pygame.Rect(x, y, btn_size, btn_size)
+            hover = r.collidepoint(mouse_pos)
+
+            color = tuple(min(255, c + 40) for c in base_color) if hover else base_color
+
+            # półprzezroczyste tło, żeby przycisk był widoczny na każdej karcie
+            bg = pygame.Surface((btn_size, btn_size), pygame.SRCALPHA)
+            bg.fill((*color, 210))
+            self.screen.blit(bg, (r.x, r.y))
+            pygame.draw.rect(self.screen, (0, 0, 0), r, 1)
+
+            if icon:
+                self.screen.blit(icon, (r.x, r.y))
+            else:
+                # fallback – znak Unicode, gdyby SVG się nie wczytał
+                font = fonts.get_font("StoryScript S")
+                letter = {"up": "▲", "down": "▼", "delete": "✕"}[name]
+                t = font.render(letter, True, (255, 255, 255))
+                self.screen.blit(t, t.get_rect(center=r.center))
+
+            self.deck_card_buttons.append((r, name, deck_index))
+            y += btn_size + gap
+
+    def _handle_deck_card_action(self, action: str, idx: int):
+        """Wykonuje akcję up/down/delete na karcie z talii (po indeksie)."""
+        if not (0 <= idx < len(self.deck)):
+            return
+        card = self.deck[idx]
+
+        if action == "up":
+            if idx > 0:
+                self.deck[idx - 1], self.deck[idx] = self.deck[idx], self.deck[idx - 1]
+
+        elif action == "down":
+            if idx < len(self.deck) - 1:
+                self.deck[idx + 1], self.deck[idx] = self.deck[idx], self.deck[idx + 1]
+
+        elif action == "delete":
+            self.deck.pop(idx)
+            self.deck_counts[card.name_key] = max(
+                0, self.deck_counts.get(card.name_key, 0) - 1
+            )
+
     def draw_card_counter(self, view, x, y, width, height):
         """Rysuje licznik kopii na karcie."""
         count = self.deck_counts.get(view.card.name_key, 0)
@@ -860,18 +926,24 @@ class DeckEditor:
 
                     mouse_pos = event.pos
 
-                    # 2) Klik w ikonę filtra typu
+                    # 3) Przyciski na kartach w lewym panelu (up/down/delete)
+                    for btn_rect, action, idx in self.deck_card_buttons:
+                        if btn_rect.collidepoint(mouse_pos):
+                            self._handle_deck_card_action(action, idx)
+                            return
+
+                    # 4) Klik w ikonę filtra typu
                     for ic in self.type_icons:
                         if ic.handle_click(mouse_pos):
                             return
 
-                    # 3) Przyciski
+                    # 5) Przyciski górne (Zapisz, Zapisz jako, itd.)
                     for btn in self.buttons:
                         if btn["rect"].collidepoint(mouse_pos) and btn["action"] is not None:
                             btn["action"]()
                             return
 
-                    # 4) Prawy panel – dodaj kopię
+                    # 6) Prawy panel – dodaj kopię
                     for rect, card in self.card_rects:
                         if rect.collidepoint(mouse_pos):
                             if self.deck_counts.get(card.name_key, 0) < getattr(card, 'max_in_deck', 6):
@@ -879,7 +951,7 @@ class DeckEditor:
                                 self.deck_counts[card.name_key] = self.deck_counts.get(card.name_key, 0) + 1
                             return
 
-                    # 5) Lewy panel – usuń kopię
+                    # 7) Lewy panel – usuń kopię
                     for rect, card in self.deck_card_rects:
                         if rect.collidepoint(mouse_pos):
                             if card in self.deck:
@@ -946,17 +1018,20 @@ class DeckEditor:
         y = 150 - self.left_scroll_offset
         self.deck_card_rects.clear()
         self.deck_card_views.clear()
+        self.deck_card_buttons.clear()
         card_w = left_width - 20
         card_h = int(card_w * 1.4)
-        for card in self.deck:
+        for idx, card in enumerate(self.deck):
             rect = pygame.Rect(10, y, card_w, card_h)
             if rect.bottom > 150 and rect.top < self.screen_height:
-                # Tworzymy CardView
                 view = CardView(card, self.localization)
                 view.update_rect(rect.x, rect.y, rect.width, rect.height)
                 view.draw(self.screen, rect.x, rect.y, rect.width, rect.height, language=self.language)
                 self.deck_card_views.append(view)
-                self.deck_card_rects.append((rect, card))
+                self.deck_card_rects.append((rect, card, idx))   # <-- idx dodane
+
+                # Małe przyciski akcji w prawym górnym rogu karty
+                self._draw_deck_card_buttons(rect, idx)
             y += card_h - 330
 
         # ---------- PRAWY PANEL ----------
