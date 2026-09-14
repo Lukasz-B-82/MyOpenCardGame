@@ -43,6 +43,10 @@ Gra oferuje:
 - ✅ **Wieloosobowość lokalna** – obsługa od 2 do 8 graczy (hot‑seat).
 - ✅ **Tłumaczenia** – pliki YAML dla UI, nazw kart, typów.
 - ✅ **Pełny ekran i zmiana rozmiaru** – okno można dowolnie skalować.
+- ✅ **Przeciwnik AI (heurystyczny)** – wagi konfigurowalne w `defines/ai_heuristic.lua`, integracja z menu (wybór typu gracza), tryb obserwacji (widoczne decyzje / gra „po cichu").
+- ✅ **System walki z rzutami kości** – pełna symulacja ataku i kontrataków, wyświetlanie rzutów, koszt ataku w inicjatywie (malejący za każde kolejne starcie w turze).
+- ✅ **Warunki zwycięstwa** – przewaga punktowa (>75% wartości kart na planszy) po `min_turns`, twarde zakończenie po `max_turns`.
+- ✅ **Edytor talii** – modal wyboru talii, klikalne ikony typów (filtr), wykres narastającej liczby kart każdego typu.
 
 ---
 
